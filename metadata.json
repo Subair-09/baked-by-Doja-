@@ -1,0 +1,6 @@
+{
+  "name": "Baked by Doja",
+  "description": "Premium landing page for Baked by Doja - freshly baked homemade banana bread with premium visual layout and conversion optimized ordering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
