@@ -22,7 +22,7 @@ export default function FloatingWhatsApp() {
     >
       {/* Floating tooltip */}
       <span className="absolute right-14 bg-chocolate text-cream text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl shadow-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none whitespace-nowrap">
-        Chat With Doja 🍌
+        Chat With Doja
       </span>
       <MessageCircle className="w-6 h-6 fill-current text-white" />
     </motion.button>

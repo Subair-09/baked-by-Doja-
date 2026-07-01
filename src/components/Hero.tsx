@@ -55,7 +55,7 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-chocolate to-caramel underline decoration-banana decoration-wavy">
                 Banana Bread
               </span> <br />
-              You’ll Fall in Love With 🍌
+              You’ll Fall in Love With
             </h1>
 
             {/* Features Stacks */}
@@ -99,7 +99,7 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
                 onClick={onViewMenuClick}
                 className="bg-cream hover:bg-beige text-chocolate border border-chocolate/20 font-semibold text-base px-8 py-4 rounded-full shadow-md transition-all duration-300 transform hover:-translate-y-1 active:translate-y-0 text-center cursor-pointer"
               >
-                🛒 View Menu
+                View Menu
               </button>
             </div>
           </motion.div>
@@ -151,7 +151,7 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
               transition={{ type: 'spring', stiffness: 100, delay: 0.8 }}
               className="absolute bottom-6 -left-2 sm:-left-6 bg-cream/95 backdrop-blur-sm border border-leaf/20 px-4 py-2.5 rounded-2xl shadow-lg flex items-center space-x-2"
             >
-              <span className="text-lg">🌿</span>
+              <span className="text-lg"></span>
               <p className="text-[11px] font-semibold text-chocolate">100% Wholesome Ingredients</p>
             </motion.div>
           </motion.div>

@@ -75,7 +75,7 @@ export default function ExitIntentPopup({ onClaimDiscount }: ExitIntentPopupProp
 
             {/* Sparkly Icons */}
             <div className="mx-auto w-16 h-16 rounded-3xl bg-banana flex items-center justify-center shadow-lg relative">
-              <span className="text-3xl animate-bounce">🍞</span>
+              <Sparkles className="w-8 h-8 text-chocolate animate-bounce mx-auto" />
               <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                 <Flame className="w-2.5 h-2.5 fill-current" />
                 <span>Hot</span>

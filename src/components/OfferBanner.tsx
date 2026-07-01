@@ -59,7 +59,7 @@ export default function OfferBanner({ onOrderNowClick }: OfferBannerProps) {
               </div>
 
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black tracking-tight leading-tight">
-                🎉 Buy 2 Loaves, <br className="hidden sm:block" />
+                Buy 2 Loaves, <br className="hidden sm:block" />
                 Get <span className="text-banana">FREE Delivery</span>
               </h2>
 

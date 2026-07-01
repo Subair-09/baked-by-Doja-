@@ -1,14 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ShoppingBag, Globe } from 'lucide-react';
+import { Menu, X, ShoppingBag, Globe, Database, ChevronDown, ChevronUp, LogOut, LayoutDashboard, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
   onOrderNowClick: () => void;
+  currentUser: { name: string; phone: string; role?: string } | null;
+  onLogout: () => void;
+  onViewDashboardClick: () => void;
+  currentPage: 'landing' | 'dashboard';
+  setCurrentPage: (page: 'landing' | 'dashboard') => void;
 }
 
-export default function Navbar({ onOrderNowClick }: NavbarProps) {
+export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewDashboardClick, currentPage, setCurrentPage }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; source: string; message?: string; details?: string }>({
+    connected: false,
+    source: 'Checking Database Status...',
+  });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -16,6 +26,23 @@ export default function Navbar({ onOrderNowClick }: NavbarProps) {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const checkDb = async () => {
+      try {
+        const res = await fetch('/api/db/status');
+        if (res.ok) {
+          const data = await res.json();
+          setDbStatus(data);
+        }
+      } catch (e) {
+        setDbStatus({ connected: false, source: 'Offline sandbox' });
+      }
+    };
+    checkDb();
+    const interval = setInterval(checkDb, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const navLinks = [
@@ -39,29 +66,149 @@ export default function Navbar({ onOrderNowClick }: NavbarProps) {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <a href="#home" className="flex items-center space-x-2 group">
-            <span className="text-2xl sm:text-3xl font-serif font-black text-chocolate tracking-tight flex items-center">
-              Baked <span className="text-banana ml-1">by</span> <span className="text-caramel ml-1">Doja</span>
-              <span className="text-xl ml-1 animate-pulse">🍌</span>
-            </span>
-          </a>
+          {/* Logo & DB Pill */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <a 
+              href="#home" 
+              onClick={(e) => {
+                e.preventDefault();
+                setCurrentPage('landing');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center space-x-2 group"
+            >
+              <span className="text-2xl sm:text-3xl font-serif font-black text-chocolate tracking-tight flex items-center">
+                Baked <span className="text-banana ml-1">by</span> <span className="text-caramel ml-1">Doja</span>
+                <span className="text-xl ml-1 animate-pulse"></span>
+              </span>
+            </a>
+
+            {/* Database Status Indicator Pill */}
+            <div className="flex items-center">
+              {dbStatus.connected ? (
+                <div 
+                  className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-sm"
+                  title={dbStatus.details || "Connected to Azure Database for PostgreSQL Flexible Server"}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <Database className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>Azure PG Connected</span>
+                </div>
+              ) : (
+                <div 
+                  className="flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-sm cursor-help"
+                  title={dbStatus.message || "Azure PG credentials not configured. App running in Sandbox mode with local memory."}
+                >
+                  <span className="h-2 w-2 rounded-full bg-amber-400"></span>
+                  <Database className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span>Sandbox Mode (Azure PG Pending)</span>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-8">
-            {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-chocolate/80 hover:text-chocolate font-medium text-sm transition-colors relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-caramel hover:after:w-full after:transition-all after:duration-300"
-              >
-                {link.name}
-              </a>
-            ))}
+             {navLinks.map((link) => (
+               <a
+                 key={link.name}
+                 href={link.href}
+                 onClick={() => setCurrentPage('landing')}
+                 className="text-chocolate/80 hover:text-chocolate font-medium text-sm transition-colors relative after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-caramel hover:after:w-full after:transition-all after:duration-300"
+               >
+                 {link.name}
+               </a>
+             ))}
           </nav>
 
           {/* Right Controls */}
           <div className="hidden sm:flex items-center space-x-4">
+            {currentUser && (
+              <div className="relative">
+                {/* Profile Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                  className="flex items-center space-x-2.5 bg-white hover:bg-beige/30 border border-chocolate/10 px-4 py-2 rounded-full shadow-sm transition-all duration-300 cursor-pointer select-none"
+                >
+                  <div className="w-6 h-6 rounded-full bg-caramel/10 border border-caramel/20 flex items-center justify-center text-caramel font-black text-xs">
+                    {currentUser.role === 'admin' ? 'A' : currentUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-[11px] font-black text-chocolate tracking-wide uppercase leading-none">
+                      {currentUser.role === 'admin' ? 'Admin Faridah' : currentUser.name.split(' ')[0]}
+                    </span>
+                    <span className="text-[9px] text-chocolate/50 leading-none mt-0.5">
+                      {currentUser.role === 'admin' ? 'Store Owner' : 'Customer'}
+                    </span>
+                  </div>
+                  {isProfileDropdownOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-chocolate/50 shrink-0 transition-transform duration-200" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-chocolate/50 shrink-0 transition-transform duration-200" />
+                  )}
+                </button>
+
+                {/* Click Outside overlay */}
+                {isProfileDropdownOpen && (
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setIsProfileDropdownOpen(false)} 
+                  />
+                )}
+
+                {/* Dropdown Card */}
+                <AnimatePresence>
+                  {isProfileDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-56 bg-white border border-chocolate/10 rounded-2xl shadow-xl py-2 z-50 overflow-hidden"
+                    >
+                      {/* User Info Header */}
+                      <div className="px-4 py-2.5 bg-beige/10 border-b border-chocolate/5">
+                        <p className="text-[10px] uppercase font-black tracking-wider text-chocolate/40">Logged In User</p>
+                        <p className="text-xs font-bold text-chocolate truncate">{currentUser.name}</p>
+                        <p className="text-[9px] font-mono text-chocolate/60 truncate mt-0.5">{currentUser.phone}</p>
+                      </div>
+
+                      {/* Dropdown Items */}
+                      <div className="p-1 space-y-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            onViewDashboardClick();
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-chocolate hover:bg-beige/40 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <LayoutDashboard className="w-3.5 h-3.5 text-caramel shrink-0" />
+                          <span>{currentUser.role === 'admin' ? 'Admin Center' : 'Baking Dashboard'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileDropdownOpen(false);
+                            onLogout();
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                          <span>Log out</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* Order Now Button */}
             <button
               id="nav-order-btn"
@@ -108,11 +255,47 @@ export default function Navbar({ onOrderNowClick }: NavbarProps) {
             className="lg:hidden bg-cream border-b border-chocolate/10 shadow-lg overflow-hidden"
           >
             <div className="px-4 pt-2 pb-6 space-y-2">
+              {currentUser && (
+                <div className="px-4 py-3 bg-beige/50 rounded-xl flex items-center justify-between border border-chocolate/5 mb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 rounded-full bg-caramel/10 flex items-center justify-center text-caramel font-bold text-xs select-none">
+                      {currentUser.role === 'admin' ? 'A' : currentUser.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-chocolate">
+                        {currentUser.role === 'admin' ? 'Admin Faridah' : `Hey, ${currentUser.name}`}
+                      </div>
+                      <div className="text-[10px] text-chocolate/60">{currentUser.phone}</div>
+                      <button 
+                        onClick={() => {
+                          setIsOpen(false);
+                          onViewDashboardClick();
+                        }}
+                        className="text-[10px] text-emerald-700 hover:underline font-bold mt-1 block"
+                      >
+                        {currentUser.role === 'admin' ? 'Admin Center' : 'Baking Dashboard'}
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      onLogout();
+                    }}
+                    className="text-xs text-caramel font-bold hover:underline cursor-pointer"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
               {navLinks.map((link) => (
                 <a
                   key={link.name}
                   href={link.href}
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => {
+                    setIsOpen(false);
+                    setCurrentPage('landing');
+                  }}
                   className="block px-4 py-3 rounded-xl text-chocolate hover:bg-beige font-medium transition-colors"
                 >
                   {link.name}
@@ -135,6 +318,8 @@ export default function Navbar({ onOrderNowClick }: NavbarProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+
     </header>
   );
 }

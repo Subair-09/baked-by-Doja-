@@ -146,9 +146,9 @@ export default function Gallery() {
                   <div className="pt-6 border-t border-chocolate/5 mt-6">
                     <p className="text-[10px] uppercase font-black tracking-widest text-chocolate/40 mb-2">Baked by Doja Studio</p>
                     <div className="flex items-center space-x-2 text-xs text-chocolate/75">
-                      <span>📸 Shot Fresh</span>
+                      <span>Shot Fresh</span>
                       <span>•</span>
-                      <span>🍌 Handcrafted</span>
+                      <span>Handcrafted</span>
                     </div>
                   </div>
                 </div>

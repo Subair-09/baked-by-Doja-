@@ -17,28 +17,58 @@ export default function ContactFooter({ onOrderNowClick }: ContactFooterProps) {
 
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone) {
       alert("Please fill in your Name and Phone Number so we can reach you!");
       return;
     }
 
-    // Format a beautiful WhatsApp text
-    const text = `Hello Baked by Doja! My name is ${formData.name}. I am interested in ordering/inquiring about the ${formData.loaf} banana bread.
-Phone: ${formData.phone}
-Email: ${formData.email || 'N/A'}
-Message: ${formData.message}`;
-
-    const encodedText = encodeURIComponent(text);
-    
-    // Simulate submission success and open WhatsApp
     setIsSubmitted(true);
-    setTimeout(() => {
-      window.open(`https://wa.me/2347025566294?text=${encodedText}`, '_blank');
-      setIsSubmitted(false);
-      setFormData({ name: '', email: '', phone: '', message: '', loaf: 'Classic Plain' });
-    }, 1500);
+
+    try {
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!res.ok) {
+        throw new Error('Server failed to save inquiry');
+      }
+
+      // Sync locally too
+      try {
+        const existing = localStorage.getItem('baked_by_doja_inquiries');
+        const inquiries = existing ? JSON.parse(existing) : [];
+        inquiries.push({ ...formData, date: new Date().toISOString() });
+        localStorage.setItem('baked_by_doja_inquiries', JSON.stringify(inquiries));
+      } catch (err) {}
+
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setFormData({ name: '', email: '', phone: '', message: '', loaf: 'Classic Plain' });
+      }, 3000);
+
+    } catch (err) {
+      console.warn("API Inquiry failed, saving to local storage fallback:", err);
+      try {
+        const existing = localStorage.getItem('baked_by_doja_inquiries');
+        const inquiries = existing ? JSON.parse(existing) : [];
+        inquiries.push({
+          ...formData,
+          date: new Date().toISOString(),
+        });
+        localStorage.setItem('baked_by_doja_inquiries', JSON.stringify(inquiries));
+      } catch (err2) {
+        console.error('Failed to save inquiry locally', err2);
+      }
+
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setFormData({ name: '', email: '', phone: '', message: '', loaf: 'Classic Plain' });
+      }, 3000);
+    }
   };
 
   return (
@@ -59,7 +89,7 @@ Message: ${formData.message}`;
                 Connect With Us
               </span>
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black tracking-tight text-white leading-tight">
-                Get in Touch For Custom &amp; Corporate Orders 🍌
+                Get in Touch For Custom &amp; Corporate Orders
               </h2>
               <p className="text-xs sm:text-sm text-cream/70 leading-relaxed font-sans max-w-lg">
                 Have a wedding, office party, corporate event, or a special gift delivery in mind? Send us a message or contact us directly on WhatsApp. We reply within minutes!
@@ -125,7 +155,7 @@ Message: ${formData.message}`;
                   </div>
                   <h4 className="text-lg font-bold text-white">Inquiry Sent Successfully!</h4>
                   <p className="text-xs text-cream/70 max-w-xs">
-                    Redirecting you to our WhatsApp Chat line for instant confirmation...
+                    Thank you! Your inquiry has been received. Our head baker will contact you shortly.
                   </p>
                 </motion.div>
               ) : (
@@ -197,7 +227,7 @@ Message: ${formData.message}`;
                     className="w-full bg-banana hover:bg-honey text-chocolate font-bold py-3.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
-                    Send on WhatsApp
+                    Send Message
                   </button>
                 </form>
               )}
@@ -214,12 +244,12 @@ Message: ${formData.message}`;
           className="bg-banana text-chocolate text-center p-8 sm:p-12 lg:p-16 rounded-[3rem] border border-white/20 shadow-xl relative overflow-hidden"
         >
           {/* Sparkly bits */}
-          <div className="absolute top-0 left-0 text-3xl opacity-20 p-6">🍞</div>
-          <div className="absolute bottom-0 right-0 text-3xl opacity-20 p-6">☕</div>
+          <div className="absolute top-0 left-0 text-3xl opacity-20 p-6"></div>
+          <div className="absolute bottom-0 right-0 text-3xl opacity-20 p-6"></div>
 
           <div className="max-w-2xl mx-auto space-y-6 relative z-10">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-black leading-tight">
-              Every Slice Tells a Story ❤️
+              Every Slice Tells a Story
             </h2>
             <p className="text-sm sm:text-base text-chocolate/85 font-sans leading-relaxed">
               Treat yourself or someone deeply special to the comforting taste of freshly baked homemade banana bread. Life is sweeter with every single bite.
