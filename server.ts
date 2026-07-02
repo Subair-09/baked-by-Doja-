@@ -878,14 +878,25 @@ app.delete("/api/images", async (req: express.Request, res: express.Response): P
 
 // Setup Vite Dev Server / Static Assets Route
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const safeDirname = typeof __dirname !== "undefined" ? __dirname : "";
+  const isProduction = 
+    process.env.NODE_ENV === "production" || 
+    safeDirname.endsWith("dist") || 
+    safeDirname.includes("/dist") || 
+    safeDirname.includes("\\dist");
+
+  console.log(`[INFO] Starting server. Production mode active: ${isProduction}. Safe __dirname is: ${safeDirname}`);
+
+  if (!isProduction) {
+    console.log("🛠️ Running in development mode with Vite dev middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = __dirname.endsWith("dist") ? __dirname : path.join(process.cwd(), "dist");
+    const distPath = safeDirname.endsWith("dist") ? safeDirname : path.join(process.cwd(), "dist");
+    console.log(`📦 Running in production mode. Serving static assets from: ${distPath}`);
     app.use(express.static(distPath, {
       setHeaders: (res, filePath) => {
         if (filePath.endsWith("index.html")) {
