@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
-import { products } from '../data';
-import { Product } from '../types';
+import { products, gallery } from '../data';
+import { Product, GalleryItem } from '../types';
 
 interface UserDashboardProps {
   isOpen: boolean;
@@ -22,6 +22,10 @@ interface UserDashboardProps {
   onProductsChange?: (products: Product[]) => void;
   initialTab?: string;
   onRefreshProducts?: () => Promise<Product[] | null>;
+  onRefreshProductsOnly?: () => Promise<Product[] | null>;
+  gallery?: GalleryItem[];
+  onGalleryChange?: (gallery: GalleryItem[]) => void;
+  onRefreshGallery?: () => Promise<GalleryItem[] | null>;
 }
 
 interface CartItem {
@@ -44,7 +48,8 @@ const STATUS_STEPS = [
 
 export default function UserDashboard({ 
   isOpen, onClose, currentUser, onOrderNowClick, onAuthSuccess, editProductOnLoad, onResetEditProductOnLoad,
-  products: propProducts, onProductsChange, initialTab, onRefreshProducts
+  products: propProducts, onProductsChange, initialTab, onRefreshProducts,
+  gallery: propGallery, onGalleryChange, onRefreshGallery
 }: UserDashboardProps) {
   const [currentTab, setCurrentTab] = useState<string>('browse');
 
@@ -100,6 +105,35 @@ export default function UserDashboard({
       setLocalAllProducts(updatedProducts);
     }
     localStorage.setItem('baked_by_doja_products', JSON.stringify(updatedProducts));
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  // Load gallery dynamically
+  const [localAllGallery, setLocalAllGallery] = useState<GalleryItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('baked_by_doja_gallery');
+      return stored ? JSON.parse(stored) : gallery;
+    } catch {
+      return gallery;
+    }
+  });
+
+  const allGallery = propGallery || localAllGallery;
+
+  const setAllGallery = (newValOrFunc: GalleryItem[] | ((prev: GalleryItem[]) => GalleryItem[])) => {
+    let updatedGallery: GalleryItem[];
+    if (typeof newValOrFunc === 'function') {
+      updatedGallery = newValOrFunc(allGallery);
+    } else {
+      updatedGallery = newValOrFunc;
+    }
+    
+    if (onGalleryChange) {
+      onGalleryChange(updatedGallery);
+    } else {
+      setLocalAllGallery(updatedGallery);
+    }
+    localStorage.setItem('baked_by_doja_gallery', JSON.stringify(updatedGallery));
     window.dispatchEvent(new Event('storage'));
   };
 
@@ -185,7 +219,8 @@ export default function UserDashboard({
   };
 
   // ================= ADMIN STATES =================
-  const [adminSubTab, setAdminSubTab] = useState<'overview' | 'products' | 'orders' | 'customers' | 'inventory' | 'reviews' | 'settings'>('overview');
+  const [adminSubTab, setAdminSubTab] = useState<'overview' | 'products' | 'orders' | 'customers' | 'inventory' | 'reviews' | 'settings' | 'gallery'>('overview');
+  const [weeklyViewMode, setWeeklyViewMode] = useState<'current_week' | 'all_time'>('current_week');
   const [paystackPublicKey, setPaystackPublicKey] = useState('');
   const [paystackSecretKey, setPaystackSecretKey] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -251,6 +286,14 @@ export default function UserDashboard({
     toppings: 'Classic Plain, Powdered Sugar, Salted Butter',
     image: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=600',
     prepTime: 'Baked fresh daily (ships within 24h)'
+  });
+
+  const [editingGalleryItem, setEditingGalleryItem] = useState<GalleryItem | null>(null);
+  const [galleryForm, setGalleryForm] = useState({
+    id: '',
+    title: '',
+    category: 'loaves' as 'loaves' | 'pairing' | 'packaging' | 'lifestyle',
+    image: ''
   });
   const [inventory, setInventory] = useState<Record<string, number>>(() => {
     try {
@@ -398,6 +441,9 @@ export default function UserDashboard({
       }
       if (onRefreshProducts) {
         promises.push(onRefreshProducts());
+      }
+      if (onRefreshGallery) {
+        promises.push(onRefreshGallery());
       }
       await Promise.allSettled(promises);
       triggerToast("All dashboard data synced in real-time!", "success");
@@ -679,6 +725,139 @@ export default function UserDashboard({
         triggerToast('Recipe removed from the menu and its image was deleted from storage.', 'info');
       }
     );
+  };
+
+  const handleSaveGalleryItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryForm.title || !galleryForm.image) {
+      triggerToast('Please upload an image or enter an image link.', 'error');
+      return;
+    }
+
+    const itemId = galleryForm.id || `g_${Date.now()}`;
+    const updatedItem: GalleryItem = {
+      id: itemId,
+      title: galleryForm.title,
+      category: galleryForm.category,
+      image: galleryForm.image
+    };
+
+    if (editingGalleryItem) {
+      setAllGallery(prev => prev.map(g => g.id === editingGalleryItem.id ? updatedItem : g));
+      triggerToast(`Gallery item "${galleryForm.title}" updated successfully!`, 'success');
+      setEditingGalleryItem(null);
+    } else {
+      setAllGallery(prev => [...prev, updatedItem]);
+      triggerToast(`New gallery item "${galleryForm.title}" added to showcase!`, 'success');
+    }
+
+    // Reset Form
+    setGalleryForm({
+      id: '',
+      title: '',
+      category: 'loaves',
+      image: ''
+    });
+  };
+
+  const handleEditGalleryItem = (item: GalleryItem) => {
+    setEditingGalleryItem(item);
+    setGalleryForm({
+      id: item.id,
+      title: item.title,
+      category: item.category as 'loaves' | 'pairing' | 'packaging' | 'lifestyle',
+      image: item.image
+    });
+  };
+
+  const handleDeleteGalleryItem = (id: string) => {
+    const itemToDelete = allGallery.find(g => g.id === id);
+    showConfirm(
+      'Remove Gallery Item',
+      'Are you absolutely sure you want to remove this image from the customer gallery showcase?',
+      async () => {
+        if (itemToDelete && itemToDelete.image) {
+          try {
+            await fetch('/api/images', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageUrl: itemToDelete.image })
+            });
+          } catch (err) {
+            console.error("Failed to delete gallery image:", err);
+          }
+        }
+        setAllGallery(prev => prev.filter(g => g.id !== id));
+        triggerToast('Gallery item removed and its image was cleaned up from storage.', 'info');
+      }
+    );
+  };
+
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [galleryUploadSource, setGalleryUploadSource] = useState<string | null>(null);
+  const [isDraggingGallery, setIsDraggingGallery] = useState(false);
+
+  const uploadGalleryFile = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      triggerToast('Image file size must be less than 5MB.', 'error');
+      return;
+    }
+
+    setIsUploadingGallery(true);
+    setGalleryUploadSource(null);
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.success && data.url) {
+        setGalleryForm(prev => ({ ...prev, image: data.url }));
+        setGalleryUploadSource(data.source);
+        triggerToast(data.message || 'Gallery image uploaded successfully!', 'success');
+      } else {
+        throw new Error(data.error || 'Upload failed');
+      }
+    } catch (err: any) {
+      console.error('Upload failed:', err);
+      triggerToast(`Failed to upload gallery image: ${err.message}`, 'error');
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleGalleryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await uploadGalleryFile(file);
+    }
+  };
+
+  const handleGalleryDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingGallery(true);
+  };
+
+  const handleGalleryDragLeave = () => {
+    setIsDraggingGallery(false);
+  };
+
+  const handleGalleryDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingGallery(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await uploadGalleryFile(file);
+    }
   };
 
   const handleDeleteOrder = (orderId: string) => {
@@ -1163,8 +1342,9 @@ export default function UserDashboard({
   if (!isOpen) return null;
 
   const activeOrder = orders.find(o => o.orderId === selectedOrderId) || orders[0];
-  const totalQuantity = orders.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
-  const totalSpend = orders.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
+  const nonRejectedOrders = orders.filter(o => o.status !== 'rejected');
+  const totalQuantity = nonRejectedOrders.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
+  const totalSpend = nonRejectedOrders.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
   const clientLoyaltyPoints = currentUser ? (loyaltyPoints[currentUser.phone] ?? (totalQuantity * 150)) : 0;
 
   // Active items counts
@@ -2451,7 +2631,7 @@ export default function UserDashboard({
                       </button>
 
                       <div className="flex flex-wrap gap-1 bg-beige/10 p-1.5 rounded-xl border border-chocolate/5">
-                        {(['overview', 'products', 'orders', 'customers', 'inventory', 'reviews', 'settings'] as const).map((tab) => (
+                        {(['overview', 'products', 'orders', 'customers', 'inventory', 'reviews', 'gallery', 'settings'] as const).map((tab) => (
                           <button
                             key={tab}
                             onClick={() => setAdminSubTab(tab)}
@@ -2469,122 +2649,306 @@ export default function UserDashboard({
                   </div>
 
                   {/* SUB-TAB 1: OVERVIEW & SALES REPORTS */}
-                  {adminSubTab === 'overview' && (
-                    <div className="space-y-6">
-                      {/* High Level Metrics Cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
-                          <div className="flex items-center justify-between text-emerald-800">
-                            <span className="text-[9px] font-black uppercase tracking-wider">Total Sales Revenue</span>
-                            <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  {adminSubTab === 'overview' && (() => {
+                    const validOrders = orders.filter(o => o.status !== 'rejected');
+                    
+                    // Compute current week boundaries (Monday to Sunday)
+                    const getWeekData = () => {
+                      const today = new Date();
+                      const currentDay = today.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+                      
+                      // Calculate difference to Monday
+                      const diffToMonday = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+                      const mondayDate = new Date(today);
+                      mondayDate.setDate(diffToMonday);
+                      mondayDate.setHours(0, 0, 0, 0);
+                      
+                      const sundayDate = new Date(mondayDate);
+                      sundayDate.setDate(mondayDate.getDate() + 6);
+                      sundayDate.setHours(23, 59, 59, 999);
+                      
+                      return { mondayDate, sundayDate };
+                    };
+                    
+                    const { mondayDate, sundayDate } = getWeekData();
+                    
+                    const getCalendarDateForDay = (weekdayIndex: number) => {
+                      // Offset calculation from Monday (index 1)
+                      const offset = weekdayIndex === 0 ? 6 : weekdayIndex - 1;
+                      const targetDate = new Date(mondayDate);
+                      targetDate.setDate(mondayDate.getDate() + offset);
+                      return targetDate;
+                    };
+
+                    const weekdayKeys = [
+                      { label: 'Monday', index: 1, shortLabel: 'Mon' },
+                      { label: 'Tuesday', index: 2, shortLabel: 'Tue' },
+                      { label: 'Wednesday', index: 3, shortLabel: 'Wed' },
+                      { label: 'Thursday', index: 4, shortLabel: 'Thu' },
+                      { label: 'Friday', index: 5, shortLabel: 'Fri' },
+                      { label: 'Saturday', index: 6, shortLabel: 'Sat' },
+                      { label: 'Sunday', index: 0, shortLabel: 'Sun' },
+                    ];
+
+                    const dayStats = weekdayKeys.map(dayKey => {
+                      const targetCalendarDate = getCalendarDateForDay(dayKey.index);
+                      
+                      const ordersForDay = validOrders.filter(o => {
+                        const oDate = new Date(o.date);
+                        const matchesDay = oDate.getDay() === dayKey.index;
+                        
+                        if (weeklyViewMode === 'current_week') {
+                          return matchesDay &&
+                                 oDate.getFullYear() === targetCalendarDate.getFullYear() &&
+                                 oDate.getMonth() === targetCalendarDate.getMonth() &&
+                                 oDate.getDate() === targetCalendarDate.getDate();
+                        }
+                        return matchesDay;
+                      });
+                      
+                      const totalVolume = ordersForDay.reduce((sum, o) => sum + (o.quantity || 1), 0);
+                      const totalRevenue = ordersForDay.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+                      
+                      return {
+                        ...dayKey,
+                        calendarDate: targetCalendarDate,
+                        volume: totalVolume,
+                        revenue: totalRevenue,
+                        ordersCount: ordersForDay.length,
+                      };
+                    });
+                    
+                    const maxVolume = Math.max(...dayStats.map(d => d.volume), 1);
+                    const totalVolumeSum = dayStats.reduce((sum, d) => sum + d.volume, 0);
+                    const totalRevenueSum = dayStats.reduce((sum, d) => sum + d.revenue, 0);
+
+                    const weekRangeStr = `${mondayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${sundayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${sundayDate.getFullYear()}`;
+
+                    return (
+                      <div className="space-y-6">
+                        {/* High Level Metrics Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                            <div className="flex items-center justify-between text-emerald-800">
+                              <span className="text-[9px] font-black uppercase tracking-wider">Total Sales Revenue</span>
+                              <TrendingUp className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <h3 className="text-2xl font-serif font-black text-emerald-950 mt-1">
+                              ₦{validOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0).toLocaleString()}
+                            </h3>
+                            <p className="text-[10px] text-emerald-700/70 mt-1">From {validOrders.length} successful transactions</p>
                           </div>
-                          <h3 className="text-2xl font-serif font-black text-emerald-950 mt-1">
-                            ₦{orders.reduce((acc, o) => acc + (o.totalAmount || 0), 0).toLocaleString()}
-                          </h3>
-                          <p className="text-[10px] text-emerald-700/70 mt-1">From {orders.length} transactions</p>
+
+                          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                            <div className="flex items-center justify-between text-amber-800">
+                              <span className="text-[9px] font-black uppercase tracking-wider">Average Order Value (AOV)</span>
+                              <ShoppingBag className="w-4 h-4 text-amber-600" />
+                            </div>
+                            <h3 className="text-2xl font-serif font-black text-amber-950 mt-1">
+                              ₦{validOrders.length > 0 
+                                ? Math.round(validOrders.reduce((acc, o) => acc + (o.totalAmount || 0), 0) / validOrders.length).toLocaleString()
+                                : '0'
+                              }
+                            </h3>
+                            <p className="text-[10px] text-amber-700/70 mt-1">Naira spend ratio</p>
+                          </div>
+
+                          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                            <div className="flex items-center justify-between text-blue-800">
+                              <span className="text-[9px] font-black uppercase tracking-wider">Total Volume Ordered</span>
+                              <Package className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <h3 className="text-2xl font-serif font-black text-blue-950 mt-1">
+                              {validOrders.reduce((acc, o) => acc + (o.quantity || 1), 0)} Loaves
+                            </h3>
+                            <p className="text-[10px] text-blue-700/70 mt-1">Fresh bakes cataloged</p>
+                          </div>
+
+                          <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                            <div className="flex items-center justify-between text-rose-800">
+                              <span className="text-[9px] font-black uppercase tracking-wider">Pending Baking Slots</span>
+                              <Clock className="w-4 h-4 text-rose-600 animate-pulse" />
+                            </div>
+                            <h3 className="text-2xl font-serif font-black text-rose-950 mt-1">
+                              {validOrders.filter(o => o.status !== 'delivered').length} Orders
+                            </h3>
+                            <p className="text-[10px] text-rose-700/70 mt-1">Currently in-oven queues</p>
+                          </div>
                         </div>
 
-                        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-                          <div className="flex items-center justify-between text-amber-800">
-                            <span className="text-[9px] font-black uppercase tracking-wider">Average Order Value (AOV)</span>
-                            <ShoppingBag className="w-4 h-4 text-amber-600" />
-                          </div>
-                          <h3 className="text-2xl font-serif font-black text-amber-950 mt-1">
-                            ₦{orders.length > 0 
-                              ? Math.round(orders.reduce((acc, o) => acc + (o.totalAmount || 0), 0) / orders.length).toLocaleString()
-                              : '0'
-                            }
-                          </h3>
-                          <p className="text-[10px] text-amber-700/70 mt-1">Naira spend ratio</p>
-                        </div>
+                        {/* Real-time Day-of-Week (Monday to Sunday) Sales Tracker */}
+                        <div className="bg-white border border-chocolate/5 p-5 rounded-2xl space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-chocolate/5">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider">Day-of-Week Loaf Tracker</span>
+                                <span className="animate-ping w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                <span className="text-[9px] text-emerald-600 font-extrabold tracking-wider uppercase">Real-time Feed</span>
+                              </div>
+                              <h4 className="font-serif font-black text-chocolate text-base mt-1">
+                                {weeklyViewMode === 'current_week' ? `Sales Volume: ${weekRangeStr}` : 'All-Time Aggregated Day-of-Week Sales'}
+                              </h4>
+                            </div>
 
-                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                          <div className="flex items-center justify-between text-blue-800">
-                            <span className="text-[9px] font-black uppercase tracking-wider">Total Volume Ordered</span>
-                            <Package className="w-4 h-4 text-blue-600" />
+                            {/* View toggle switches */}
+                            <div className="flex bg-beige/10 p-1 rounded-xl border border-chocolate/5 self-start sm:self-center">
+                              <button
+                                onClick={() => setWeeklyViewMode('current_week')}
+                                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                  weeklyViewMode === 'current_week'
+                                    ? 'bg-chocolate text-white shadow-sm'
+                                    : 'text-chocolate/60 hover:text-chocolate'
+                                }`}
+                              >
+                                This Week
+                              </button>
+                              <button
+                                onClick={() => setWeeklyViewMode('all_time')}
+                                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                  weeklyViewMode === 'all_time'
+                                    ? 'bg-chocolate text-white shadow-sm'
+                                    : 'text-chocolate/60 hover:text-chocolate'
+                                }`}
+                              >
+                                All-Time Trends
+                              </button>
+                            </div>
                           </div>
-                          <h3 className="text-2xl font-serif font-black text-blue-950 mt-1">
-                            {orders.reduce((acc, o) => acc + (o.quantity || 1), 0)} Loaves
-                          </h3>
-                          <p className="text-[10px] text-blue-700/70 mt-1">Fresh bakes cataloged</p>
-                        </div>
 
-                        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
-                          <div className="flex items-center justify-between text-rose-800">
-                            <span className="text-[9px] font-black uppercase tracking-wider">Pending Baking Slots</span>
-                            <Clock className="w-4 h-4 text-rose-600 animate-pulse" />
-                          </div>
-                          <h3 className="text-2xl font-serif font-black text-rose-950 mt-1">
-                            {orders.filter(o => o.status !== 'delivered').length} Orders
-                          </h3>
-                          <p className="text-[10px] text-rose-700/70 mt-1">Currently in-oven queues</p>
-                        </div>
-                      </div>
-
-                      {/* Visual Sales Charts (Styled SVG Representation) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        {/* Loaf Sales Chart */}
-                        <div className="lg:col-span-7 bg-white border border-chocolate/5 p-5 rounded-2xl space-y-4">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider">Bestselling Loaf Categories</span>
-                            <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">Live Stats</span>
-                          </div>
-                          <div className="space-y-3.5 pt-2">
-                            {allProducts.map((p) => {
-                              // Calculate simple percentage based on order history count
-                              const orderCount = orders.filter(o => o.productTitle.includes(p.title)).length;
-                              const maxOrders = Math.max(...allProducts.map(prod => orders.filter(o => o.productTitle.includes(prod.title)).length), 1);
-                              const pct = Math.max(10, Math.min(100, (orderCount / maxOrders) * 100));
+                          {/* Days Grid - Bar Chart Representation */}
+                          <div className="grid grid-cols-1 sm:grid-cols-7 gap-4 pt-2">
+                            {dayStats.map((day) => {
+                              const pct = Math.max(3, (day.volume / maxVolume) * 100);
+                              
                               return (
-                                <div key={p.id} className="space-y-1.5">
-                                  <div className="flex justify-between text-[11px] font-bold">
-                                    <span className="text-chocolate">{p.title}</span>
-                                    <span className="text-caramel">{orderCount} bakes (₦{(orderCount * p.price).toLocaleString()})</span>
+                                <div 
+                                  key={day.label} 
+                                  className="bg-cream/10 border border-chocolate/5 hover:border-chocolate/15 rounded-xl p-3 flex flex-col items-center justify-between min-h-[160px] transition-all relative group"
+                                >
+                                  {/* Day and Date label at the top */}
+                                  <div className="text-center">
+                                    <span className="block text-[10px] font-black text-chocolate uppercase tracking-wider leading-none">
+                                      {day.label}
+                                    </span>
+                                    {weeklyViewMode === 'current_week' && (
+                                      <span className="block text-[8px] font-mono text-chocolate/40 mt-1">
+                                        {day.calendarDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="h-2 w-full bg-beige/10 rounded-full overflow-hidden">
-                                    <div 
-                                      className="h-full bg-gradient-to-r from-honey to-caramel rounded-full transition-all duration-1000" 
-                                      style={{ width: `${pct}%` }}
-                                    />
+
+                                  {/* The Visual Bar Indicator */}
+                                  <div className="w-full flex-1 flex flex-col justify-end py-3 px-2 min-h-[60px]">
+                                    <div className="w-full bg-beige/10 rounded-full h-24 flex items-end overflow-hidden relative border border-chocolate/[0.03]">
+                                      {/* Bar Segment */}
+                                      <div 
+                                        className="w-full bg-gradient-to-t from-honey to-caramel group-hover:from-caramel group-hover:to-chocolate transition-all duration-500 rounded-t-lg"
+                                        style={{ height: `${pct}%` }}
+                                      />
+                                      {/* Micro indicator line for selected state */}
+                                      {day.volume > 0 && (
+                                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] font-black text-white mix-blend-difference">
+                                          {day.volume}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Volume & Revenue Stats at the bottom */}
+                                  <div className="text-center space-y-0.5">
+                                    <span className="block text-[11px] font-black text-chocolate">
+                                      {day.volume} {day.volume === 1 ? 'Loaf' : 'Loaves'}
+                                    </span>
+                                    <span className="block text-[8px] font-extrabold text-caramel/90">
+                                      ₦{day.revenue.toLocaleString()}
+                                    </span>
+                                    <span className="block text-[7px] text-chocolate/30 font-bold uppercase tracking-wide leading-none">
+                                      {day.ordersCount} {day.ordersCount === 1 ? 'order' : 'orders'}
+                                    </span>
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
+
+                          {/* Quick Summary Banner */}
+                          <div className="flex flex-col sm:flex-row items-center justify-between bg-beige/5 p-3 rounded-xl border border-chocolate/5 text-[10px] text-chocolate/60 gap-3">
+                            <div>
+                              <strong>{weeklyViewMode === 'current_week' ? 'Weekly Summary:' : 'All-time Summary:'}</strong> Total of{' '}
+                              <span className="font-bold text-chocolate">{totalVolumeSum} loaves</span> sold and{' '}
+                              <span className="font-bold text-emerald-700">₦{totalRevenueSum.toLocaleString()}</span> generated on these weekdays.
+                            </div>
+                            <div className="text-[9px] text-chocolate/40 italic">
+                              *Rejected orders are automatically excluded in real-time.
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Delivery Type Ratios */}
-                        <div className="lg:col-span-5 bg-white border border-chocolate/5 p-5 rounded-2xl space-y-4">
-                          <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider block">Logistics Channels Distribution</span>
-                          <div className="space-y-4 pt-2">
-                            {['standard', 'express', 'pickup'].map((type) => {
-                              const count = orders.filter(o => (o.deliveryType || '').toLowerCase() === type).length;
-                              const total = orders.length || 1;
-                              const ratio = Math.round((count / total) * 100);
-                              const label = type === 'standard' ? 'Standard Courier (₦2,500)' : type === 'express' ? 'Priority Express Dispatch (₦4,000)' : 'Self-Collection (Free)';
-                              const barColor = type === 'standard' ? 'bg-amber-500' : type === 'express' ? 'bg-rose-500' : 'bg-emerald-500';
-                              return (
-                                <div key={type} className="space-y-1">
-                                  <div className="flex justify-between text-[10px] font-black">
-                                    <span className="capitalize text-chocolate">{type}</span>
-                                    <span className="text-chocolate/50">{count} orders ({ratio}%)</span>
+                        {/* Visual Sales Charts (Styled SVG Representation) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                          {/* Loaf Sales Chart */}
+                          <div className="lg:col-span-7 bg-white border border-chocolate/5 p-5 rounded-2xl space-y-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider">Bestselling Loaf Categories</span>
+                              <span className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">Live Stats</span>
+                            </div>
+                            <div className="space-y-3.5 pt-2">
+                              {allProducts.map((p) => {
+                                // Calculate simple percentage based on order history count
+                                const orderCount = validOrders.filter(o => o.productTitle.includes(p.title)).length;
+                                const maxOrders = Math.max(...allProducts.map(prod => validOrders.filter(o => o.productTitle.includes(prod.title)).length), 1);
+                                const pct = Math.max(10, Math.min(100, (orderCount / maxOrders) * 100));
+                                return (
+                                  <div key={p.id} className="space-y-1.5">
+                                    <div className="flex justify-between text-[11px] font-bold">
+                                      <span className="text-chocolate">{p.title}</span>
+                                      <span className="text-caramel">{orderCount} bakes (₦{(orderCount * p.price).toLocaleString()})</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-beige/10 rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-gradient-to-r from-honey to-caramel rounded-full transition-all duration-1000" 
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
                                   </div>
-                                  <p className="text-[9px] text-chocolate/40 leading-none">{label}</p>
-                                  <div className="h-1.5 w-full bg-beige/15 rounded-full overflow-hidden mt-1">
-                                    <div className={`h-full ${barColor} rounded-full`} style={{ width: `${ratio}%` }} />
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
 
-                          <div className="bg-beige/10 p-3 rounded-xl border border-chocolate/5 mt-4 text-[10px] text-chocolate/60">
-                            <strong>Faridah's Culinary Note:</strong> Lagos dispatch logistics auto-optimizes based on thermal cooling parameters to ensure banana bread slices remain warm during transit.
+                          {/* Delivery Type Ratios */}
+                          <div className="lg:col-span-5 bg-white border border-chocolate/5 p-5 rounded-2xl space-y-4">
+                            <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider block">Logistics Channels Distribution</span>
+                            <div className="space-y-4 pt-2">
+                              {['standard', 'express', 'pickup'].map((type) => {
+                                const count = validOrders.filter(o => (o.deliveryType || '').toLowerCase() === type).length;
+                                const total = validOrders.length || 1;
+                                const ratio = Math.round((count / total) * 100);
+                                const label = type === 'standard' ? 'Standard Courier (₦2,500)' : type === 'express' ? 'Priority Express Dispatch (₦4,000)' : 'Self-Collection (Free)';
+                                const barColor = type === 'standard' ? 'bg-amber-500' : type === 'express' ? 'bg-rose-500' : 'bg-emerald-500';
+                                return (
+                                  <div key={type} className="space-y-1">
+                                    <div className="flex justify-between text-[10px] font-black">
+                                      <span className="capitalize text-chocolate">{type}</span>
+                                      <span className="text-chocolate/50">{count} orders ({ratio}%)</span>
+                                    </div>
+                                    <p className="text-[9px] text-chocolate/40 leading-none">{label}</p>
+                                    <div className="h-1.5 w-full bg-beige/15 rounded-full overflow-hidden mt-1">
+                                      <div className={`h-full ${barColor} rounded-full`} style={{ width: `${ratio}%` }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="bg-beige/10 p-3 rounded-xl border border-chocolate/5 mt-4 text-[10px] text-chocolate/60">
+                              <strong>Faridah's Culinary Note:</strong> Lagos dispatch logistics auto-optimizes based on thermal cooling parameters to ensure banana bread slices remain warm during transit.
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* SUB-TAB 2: MANAGE PRODUCTS (ADD/EDIT/DELETE) */}
                   {adminSubTab === 'products' && (
@@ -3368,6 +3732,211 @@ export default function UserDashboard({
                           </div>
                         </form>
                       )}
+                    </div>
+                  )}
+
+                  {/* SUB-TAB: MANAGE GALLERY */}
+                  {adminSubTab === 'gallery' && (
+                    <div className="space-y-6">
+                      {/* Add/Edit Gallery Item Form Container */}
+                      <div id="gallery-form-container" className="bg-beige/5 border border-chocolate/5 rounded-2xl p-5 space-y-4 text-left">
+                        <span className="block text-[10px] font-black uppercase text-chocolate/50 tracking-wider">
+                          {editingGalleryItem ? 'Edit Existing Gallery Item' : 'Upload New Gallery Photo'}
+                        </span>
+
+                        <form onSubmit={handleSaveGalleryItem} className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                          <div className="sm:col-span-5 space-y-1">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Photo Title</label>
+                            <input
+                              type="text"
+                              value={galleryForm.title}
+                              onChange={e => setGalleryForm({...galleryForm, title: e.target.value})}
+                              placeholder="e.g., Golden Sliced Loaf on Wood"
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-medium"
+                              required
+                            />
+                          </div>
+
+                          <div className="sm:col-span-4 space-y-1">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Category</label>
+                            <select
+                              value={galleryForm.category}
+                              onChange={e => setGalleryForm({...galleryForm, category: e.target.value as any})}
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-medium"
+                              required
+                            >
+                              <option value="loaves">Our Loaves</option>
+                              <option value="pairing">Perfect Pairings</option>
+                              <option value="packaging">Luxe Packaging</option>
+                              <option value="lifestyle">Lifestyle</option>
+                            </select>
+                          </div>
+
+                          <div className="sm:col-span-3 space-y-1">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Gallery Item ID (Optional)</label>
+                            <input
+                              type="text"
+                              value={galleryForm.id}
+                              onChange={e => setGalleryForm({...galleryForm, id: e.target.value})}
+                              placeholder="Auto-generated if blank"
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono font-bold"
+                              disabled={!!editingGalleryItem}
+                            />
+                          </div>
+
+                          <div className="sm:col-span-7 space-y-2">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Photo Image Source</label>
+                            
+                            {/* Drag & Drop File Upload Region */}
+                            <div
+                              onDragOver={handleGalleryDragOver}
+                              onDragLeave={handleGalleryDragLeave}
+                              onDrop={handleGalleryDrop}
+                              onClick={() => document.getElementById('gallery-image-upload-input')?.click()}
+                              className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-1.5 min-h-[100px] relative overflow-hidden group ${
+                                isDraggingGallery 
+                                  ? 'border-chocolate bg-chocolate/5 scale-[0.99]' 
+                                  : 'border-chocolate/10 bg-white hover:border-chocolate/30 hover:bg-beige/5'
+                              }`}
+                            >
+                              <input
+                                id="gallery-image-upload-input"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleGalleryImageUpload}
+                                disabled={isUploadingGallery}
+                              />
+
+                              {isUploadingGallery ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <Loader2 className="w-5 h-5 text-caramel animate-spin" />
+                                  <span className="text-[10px] font-bold text-chocolate/70">Uploading gallery image...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  {galleryForm.image ? (
+                                    <div className="absolute inset-0 w-full h-full">
+                                      <img 
+                                        src={galleryForm.image} 
+                                        alt="Gallery Preview" 
+                                        className="w-full h-full object-cover opacity-20 group-hover:opacity-10 transition-opacity duration-200" 
+                                      />
+                                    </div>
+                                  ) : null}
+                                  
+                                  <div className="relative z-10 flex flex-col items-center">
+                                    <UploadCloud className="w-5 h-5 text-chocolate/40 group-hover:text-chocolate/60 transition-colors duration-200 mb-0.5" />
+                                    <span className="text-[10px] font-extrabold text-chocolate leading-none">
+                                      {galleryForm.image ? 'Replace Gallery Photo' : 'Upload Gallery Photo'}
+                                    </span>
+                                    <span className="text-[8px] text-chocolate/50 font-semibold mt-0.5">
+                                      Drag & drop or click to upload (under 5MB)
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Text URL Input Field (as an alternative option) */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[8px] text-chocolate/40 font-black uppercase">Or paste raw Image URL</span>
+                                {galleryUploadSource && (
+                                  <span className="text-[7px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 rounded px-1 uppercase tracking-wider">
+                                    Source: {galleryUploadSource}
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                value={galleryForm.image}
+                                onChange={e => setGalleryForm({...galleryForm, image: e.target.value})}
+                                placeholder="https://images.unsplash.com/photo-..."
+                                className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="sm:col-span-5 flex flex-col justify-end gap-3 pb-1">
+                            {editingGalleryItem && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingGalleryItem(null);
+                                  setGalleryForm({
+                                    id: '',
+                                    title: '',
+                                    category: 'loaves',
+                                    image: ''
+                                  });
+                                }}
+                                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-extrabold text-[11px] uppercase tracking-wider py-2.5 rounded-xl shadow-sm cursor-pointer transition-transform hover:scale-[1.01]"
+                              >
+                                Cancel Edit
+                              </button>
+                            )}
+                            <button
+                              type="submit"
+                              className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-extrabold text-[11px] uppercase tracking-wider py-2.5 rounded-xl shadow-md cursor-pointer transition-transform hover:scale-[1.01] flex items-center justify-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{editingGalleryItem ? 'Update Gallery Item' : 'Publish to Showcase Gallery'}</span>
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      {/* Current Showcase List */}
+                      <div className="space-y-4">
+                        <span className="block text-[10px] font-black uppercase text-chocolate/50 tracking-wider text-left">
+                          Active Showcase Gallery Photos ({allGallery.length})
+                        </span>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {allGallery.map(item => (
+                            <div key={item.id} className="bg-white border border-chocolate/5 rounded-2xl p-2.5 space-y-2 flex flex-col group relative overflow-hidden shadow-sm hover:shadow-md transition-all text-left">
+                              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-cream/10 border border-chocolate/5">
+                                <img
+                                  src={item.image}
+                                  alt={item.title}
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                                <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-chocolate/90 text-white uppercase px-2 py-0.5 rounded-full tracking-wider shadow-sm">
+                                  {item.category}
+                                </span>
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-serif font-bold text-xs text-chocolate truncate" title={item.title}>
+                                  {item.title}
+                                </h5>
+                                <span className="text-[8px] text-chocolate/40 font-mono">ID: {item.id}</span>
+                              </div>
+
+                              <div className="flex gap-1.5 pt-1 border-t border-chocolate/5">
+                                <button
+                                  onClick={() => {
+                                    handleEditGalleryItem(item);
+                                    document.getElementById('gallery-form-container')?.scrollIntoView({ behavior: 'smooth' });
+                                  }}
+                                  className="flex-1 py-1 bg-beige/10 hover:bg-beige/25 border border-chocolate/10 text-chocolate rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors cursor-pointer text-center"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteGalleryItem(item.id)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-lg text-[9px] font-black transition-colors cursor-pointer flex items-center justify-center"
+                                  title="Delete Photo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
 

@@ -4,9 +4,15 @@ import { Camera, ZoomIn, X } from 'lucide-react';
 import { gallery } from '../data';
 import { GalleryItem } from '../types';
 
-export default function Gallery() {
+interface GalleryProps {
+  gallery?: GalleryItem[];
+}
+
+export default function Gallery({ gallery: propGallery }: GalleryProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeImage, setActiveImage] = useState<GalleryItem | null>(null);
+
+  const activeList = propGallery || gallery;
 
   const categories = [
     { key: 'all', label: 'All Photos' },
@@ -17,8 +23,8 @@ export default function Gallery() {
   ];
 
   const filteredGallery = selectedCategory === 'all'
-    ? gallery
-    : gallery.filter(item => item.category === selectedCategory);
+    ? activeList
+    : activeList.filter(item => item.category === selectedCategory);
 
   return (
     <section id="gallery" className="py-20 bg-cream/40 relative">

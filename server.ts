@@ -95,6 +95,59 @@ const defaultProducts = [
 
 let fallbackProducts: any[] = [...defaultProducts];
 
+const defaultGallery = [
+  {
+    id: 'g1',
+    title: 'Our Signature Golden Crust Loaf',
+    category: 'loaves',
+    image: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g2',
+    title: 'Gently Sliced and Ready to Serve',
+    category: 'loaves',
+    image: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g3',
+    title: 'A Perfect Morning Coffee Pairing',
+    category: 'pairing',
+    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g4',
+    title: 'Premium Hand-Wrapped Packaging',
+    category: 'packaging',
+    image: 'https://images.unsplash.com/photo-1607344645866-009c320c5ab8?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g5',
+    title: 'Luxury Linen Gift Box Bundle',
+    category: 'packaging',
+    image: 'https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g6',
+    title: 'Cozy Family Breakfast Moments',
+    category: 'lifestyle',
+    image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g7',
+    title: 'Warm Butter Melting Over Slice',
+    category: 'pairing',
+    image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=600'
+  },
+  {
+    id: 'g8',
+    title: 'Handcrafted Bakery Prep with Care',
+    category: 'lifestyle',
+    image: 'https://images.unsplash.com/photo-1517433456452-f9633a875f6f?auto=format&fit=crop&q=80&w=600'
+  }
+];
+
+let fallbackGallery: any[] = [...defaultGallery];
+
 let pool: pg.Pool | null = null;
 let tablesInitialized = false;
 
@@ -250,6 +303,29 @@ async function initializeTables(dbPool: pg.Pool) {
             `INSERT INTO doja_products (id, title, description, price, original_price, rating, image, tag, toppings, prep_time)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [p.id, p.title, p.description, p.price, p.originalPrice || null, p.rating, p.image, p.tag || null, p.toppings, p.prepTime]
+          );
+        }
+      }
+
+      // Create gallery table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS doja_gallery (
+          id VARCHAR(50) PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          category VARCHAR(50) NOT NULL,
+          image TEXT NOT NULL
+        );
+      `);
+
+      // Seed default gallery if empty
+      const galCheck = await client.query("SELECT COUNT(*) FROM doja_gallery");
+      if (parseInt(galCheck.rows[0].count, 10) === 0) {
+        console.log("🌱 Seeding default gallery to PostgreSQL...");
+        for (const g of defaultGallery) {
+          await client.query(
+            `INSERT INTO doja_gallery (id, title, category, image)
+             VALUES ($1, $2, $3, $4)`,
+            [g.id, g.title, g.category, g.image]
           );
         }
       }
@@ -463,6 +539,70 @@ app.post("/api/products", async (req, res) => {
   } catch (err: any) {
     console.error("Database connection error for products save:", err);
     return res.status(500).json({ error: "Failed to connect to database for saving products" });
+  }
+});
+
+// Gallery APIs
+// Get all gallery items
+app.get("/api/gallery", async (req, res) => {
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      const result = await dbPool.query(
+        `SELECT id, title, category, image FROM doja_gallery`
+      );
+      return res.json({ success: true, gallery: result.rows });
+    } else {
+      return res.json({ success: true, gallery: fallbackGallery });
+    }
+  } catch (err: any) {
+    console.error("Error fetching gallery from database:", err);
+    return res.json({ success: true, gallery: fallbackGallery });
+  }
+});
+
+// Save / Update all gallery items
+app.post("/api/gallery", async (req, res) => {
+  const { gallery: newGallery } = req.body;
+  if (!Array.isArray(newGallery)) {
+    return res.status(400).json({ error: "Gallery array is required" });
+  }
+
+  // Update in-memory fallback
+  fallbackGallery = [...newGallery];
+
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      const client = await dbPool.connect();
+      try {
+        await client.query("BEGIN");
+        
+        // Delete existing gallery to avoid duplicates and handle deletions
+        await client.query("DELETE FROM doja_gallery");
+        
+        for (const g of newGallery) {
+          await client.query(
+            `INSERT INTO doja_gallery (id, title, category, image)
+             VALUES ($1, $2, $3, $4)`,
+            [g.id, g.title, g.category, g.image]
+          );
+        }
+        await client.query("COMMIT");
+        return res.json({ success: true, message: "Gallery updated successfully in database" });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        console.error("Error saving gallery to database:", err);
+        return res.status(500).json({ error: "Failed to save gallery to database" });
+      } finally {
+        client.release();
+      }
+    } else {
+      return res.json({ success: true, message: "Gallery updated successfully in fallback in-memory store" });
+    }
+  } catch (err: any) {
+    console.error("Database connection error for gallery save:", err);
+    return res.status(500).json({ error: "Failed to connect to database for saving gallery" });
   }
 });
 

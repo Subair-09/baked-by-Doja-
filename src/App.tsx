@@ -12,10 +12,9 @@ import FAQ from './components/FAQ';
 import ContactFooter from './components/ContactFooter';
 import OrderModal from './components/OrderModal';
 import UserDashboard from './components/UserDashboard';
-import ExitIntentPopup from './components/ExitIntentPopup';
 import FloatingWhatsApp from './components/FloatingWhatsApp';
-import { Product } from './types';
-import { products as defaultProducts } from './data';
+import { Product, GalleryItem } from './types';
+import { products as defaultProducts, gallery as defaultGallery } from './data';
 
 export default function App() {
   const [activeProducts, setActiveProducts] = useState<Product[]>(() => {
@@ -24,6 +23,15 @@ export default function App() {
       return stored ? JSON.parse(stored) : defaultProducts;
     } catch {
       return defaultProducts;
+    }
+  });
+
+  const [activeGallery, setActiveGallery] = useState<GalleryItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('baked_by_doja_gallery');
+      return stored ? JSON.parse(stored) : defaultGallery;
+    } catch {
+      return defaultGallery;
     }
   });
 
@@ -42,7 +50,22 @@ export default function App() {
         console.error("Error loading products from server:", err);
       }
     };
+    const loadGalleryFromServer = async () => {
+      try {
+        const res = await fetch('/api/gallery');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.gallery)) {
+            setActiveGallery(data.gallery);
+            localStorage.setItem('baked_by_doja_gallery', JSON.stringify(data.gallery));
+          }
+        }
+      } catch (err) {
+        console.error("Error loading gallery from server:", err);
+      }
+    };
     loadProductsFromServer();
+    loadGalleryFromServer();
   }, []);
 
   const saveProducts = async (updated: Product[]) => {
@@ -58,6 +81,22 @@ export default function App() {
       });
     } catch (e) {
       console.error('Failed to sync products to database:', e);
+    }
+  };
+
+  const saveGallery = async (updated: GalleryItem[]) => {
+    setActiveGallery(updated);
+    localStorage.setItem('baked_by_doja_gallery', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    
+    try {
+      await fetch('/api/gallery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gallery: updated })
+      });
+    } catch (e) {
+      console.error('Failed to sync gallery to database:', e);
     }
   };
 
@@ -79,8 +118,26 @@ export default function App() {
     return null;
   };
 
+  const refreshGallery = async () => {
+    try {
+      const res = await fetch('/api/gallery');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.gallery)) {
+          setActiveGallery(data.gallery);
+          localStorage.setItem('baked_by_doja_gallery', JSON.stringify(data.gallery));
+          window.dispatchEvent(new Event('storage'));
+          return data.gallery;
+        }
+      }
+    } catch (err) {
+      console.error("Error loading gallery from server:", err);
+    }
+    return null;
+  };
+
   useEffect(() => {
-    const checkProducts = () => {
+    const checkProductsAndGallery = () => {
       try {
         const stored = localStorage.getItem('baked_by_doja_products');
         if (stored) {
@@ -93,8 +150,20 @@ export default function App() {
           });
         }
       } catch (e) {}
+      try {
+        const storedGal = localStorage.getItem('baked_by_doja_gallery');
+        if (storedGal) {
+          const parsedGal = JSON.parse(storedGal);
+          setActiveGallery(prev => {
+            if (JSON.stringify(parsedGal) !== JSON.stringify(prev)) {
+              return parsedGal;
+            }
+            return prev;
+          });
+        }
+      } catch (e) {}
     };
-    const interval = setInterval(checkProducts, 2000);
+    const interval = setInterval(checkProductsAndGallery, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -252,7 +321,7 @@ export default function App() {
           <Testimonials />
 
           {/* Pinterest-style Gallery with zoomable Lightbox */}
-          <Gallery />
+          <Gallery gallery={activeGallery} />
 
           {/* Step by step Interactive Process Chart */}
           <HowItWorks />
@@ -265,9 +334,6 @@ export default function App() {
 
           {/* Custom Contact Form, Call-to-action & Footer */}
           <ContactFooter onOrderNowClick={handleOpenDefaultOrder} />
-
-          {/* Continuous exit intent prompt */}
-          <ExitIntentPopup onClaimDiscount={handleOpenDefaultOrder} />
         </>
       ) : (
         /* Modern Live Tracker & Loyalty Dashboard as a standalone page */
@@ -282,6 +348,9 @@ export default function App() {
           products={activeProducts}
           onProductsChange={saveProducts}
           onRefreshProducts={refreshProducts}
+          gallery={activeGallery}
+          onGalleryChange={saveGallery}
+          onRefreshGallery={refreshGallery}
           initialTab={dashboardTab}
         />
       )}
