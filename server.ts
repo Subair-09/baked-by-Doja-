@@ -30,6 +30,71 @@ const fallbackSettings: Record<string, string> = {
   paystack_secret_key: process.env.PAYSTACK_SECRET_KEY || ""
 };
 
+const defaultProducts = [
+  {
+    id: 'classic',
+    title: 'Classic Banana Bread Loaf',
+    description: 'The golden standard. Soft, perfectly moist, and exploding with rich natural banana sweetness from hand-ripened bananas.',
+    price: 6500,
+    originalPrice: 8000,
+    rating: 4.9,
+    image: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=600',
+    tag: 'Best Seller',
+    toppings: ['Classic Plain', 'Light Cinnamon Dust', 'Butter Glaze'],
+    prepTime: 'Baked fresh daily (ships within 24h)'
+  },
+  {
+    id: 'choco-chip',
+    title: 'Double Chocolate Chip Loaf',
+    description: 'Our classic moist recipe studded with rich semi-sweet Belgian chocolate chips inside and melted on top.',
+    price: 8000,
+    originalPrice: undefined as number | undefined,
+    rating: 5.0,
+    image: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=600',
+    tag: 'Highly Rated',
+    toppings: ['Belgian Milk Choc', 'Dark Chocolate Chunks', 'Salted Caramel Drizzle'],
+    prepTime: 'Baked fresh daily (ships within 24h)'
+  },
+  {
+    id: 'walnut',
+    title: 'Toasted Walnut Banana Bread',
+    description: 'Infused with the nutty crunch of premium roasted California walnuts, roasted in-house and folded gently into the batter.',
+    price: 8500,
+    originalPrice: 9500,
+    rating: 4.8,
+    image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=600',
+    tag: 'Crunchy Favorite',
+    toppings: ['Extra Walnuts', 'Honey Drizzle', 'Sea Salt Flakes'],
+    prepTime: 'Baked fresh daily (ships within 24h)'
+  },
+  {
+    id: 'premium-caramel',
+    title: 'Premium Caramel Glazed Loaf',
+    description: 'Drizzled with our signature slow-simmered homemade caramel and finished with premium sea salt flakes for an exquisite sweet-savory balance.',
+    price: 9000,
+    originalPrice: undefined as number | undefined,
+    rating: 4.9,
+    image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&q=80&w=600',
+    tag: 'Chef Special',
+    toppings: ['Caramel Glaze', 'Almond Slivers', 'Whipped Butter on side'],
+    prepTime: 'Requires 6h prep notice'
+  },
+  {
+    id: 'gift-bundle',
+    title: 'Baked with Love Gift Box Bundle',
+    description: 'The ultimate luxury gift experience. Features two loaves of your choice, custom gold-foil greeting card, and elegant reusable linen-wrapped box.',
+    price: 18000,
+    originalPrice: 21000,
+    rating: 5.0,
+    image: 'https://images.unsplash.com/photo-1607344645866-009c320c5ab8?auto=format&fit=crop&q=80&w=600',
+    tag: 'Perfect Gift',
+    toppings: ['1 Classic + 1 Choco', '1 Walnut + 1 Caramel', 'Choose Custom Pair'],
+    prepTime: 'Beautifully boxed and wrapped'
+  }
+];
+
+let fallbackProducts: any[] = [...defaultProducts];
+
 let pool: pg.Pool | null = null;
 let tablesInitialized = false;
 
@@ -159,6 +224,35 @@ async function initializeTables(dbPool: pg.Pool) {
           date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Create products table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS doja_products (
+          id VARCHAR(50) PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          description TEXT NOT NULL,
+          price INTEGER NOT NULL,
+          original_price INTEGER,
+          rating DECIMAL(3,2) NOT NULL DEFAULT 5.0,
+          image TEXT NOT NULL,
+          tag VARCHAR(50),
+          toppings TEXT[] NOT NULL,
+          prep_time VARCHAR(100) NOT NULL
+        );
+      `);
+
+      // Seed default products if empty
+      const prodCheck = await client.query("SELECT COUNT(*) FROM doja_products");
+      if (parseInt(prodCheck.rows[0].count, 10) === 0) {
+        console.log("🌱 Seeding default products to PostgreSQL...");
+        for (const p of defaultProducts) {
+          await client.query(
+            `INSERT INTO doja_products (id, title, description, price, original_price, rating, image, tag, toppings, prep_time)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [p.id, p.title, p.description, p.price, p.originalPrice || null, p.rating, p.image, p.tag || null, p.toppings, p.prepTime]
+          );
+        }
+      }
 
       tablesInitialized = true;
       console.log("✅ Azure PostgreSQL flexible server tables verified/created successfully.");
@@ -298,6 +392,77 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (err: any) {
     console.error("Login error:", err);
     return res.status(500).json({ error: "Server error during login" });
+  }
+});
+
+// 3.4. Products APIs
+// 3.4a. Get all products
+app.get("/api/products", async (req, res) => {
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      const result = await dbPool.query(
+        `SELECT id, title, description, price, original_price as "originalPrice", rating, image, tag, toppings, prep_time as "prepTime" 
+         FROM doja_products`
+      );
+      const products = result.rows.map(r => ({
+        ...r,
+        price: Number(r.price),
+        originalPrice: r.originalPrice ? Number(r.originalPrice) : undefined,
+        rating: Number(r.rating)
+      }));
+      return res.json({ success: true, products });
+    } else {
+      return res.json({ success: true, products: fallbackProducts });
+    }
+  } catch (err: any) {
+    console.error("Error fetching products from database:", err);
+    return res.json({ success: true, products: fallbackProducts });
+  }
+});
+
+// 3.4b. Save / Update all products
+app.post("/api/products", async (req, res) => {
+  const { products: newProducts } = req.body;
+  if (!Array.isArray(newProducts)) {
+    return res.status(400).json({ error: "Products array is required" });
+  }
+
+  // Update in-memory fallback
+  fallbackProducts = [...newProducts];
+
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      const client = await dbPool.connect();
+      try {
+        await client.query("BEGIN");
+        
+        // Delete existing products to avoid duplicates and handle deletions
+        await client.query("DELETE FROM doja_products");
+        
+        for (const p of newProducts) {
+          await client.query(
+            `INSERT INTO doja_products (id, title, description, price, original_price, rating, image, tag, toppings, prep_time)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [p.id, p.title, p.description, p.price, p.originalPrice || null, p.rating, p.image, p.tag || null, p.toppings, p.prepTime]
+          );
+        }
+        await client.query("COMMIT");
+        return res.json({ success: true, message: "Products updated successfully in database" });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        console.error("Error saving products to database:", err);
+        return res.status(500).json({ error: "Failed to save products to database" });
+      } finally {
+        client.release();
+      }
+    } else {
+      return res.json({ success: true, message: "Products updated successfully in fallback in-memory store" });
+    }
+  } catch (err: any) {
+    console.error("Database connection error for products save:", err);
+    return res.status(500).json({ error: "Failed to connect to database for saving products" });
   }
 });
 

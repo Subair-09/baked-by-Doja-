@@ -28,15 +28,55 @@ export default function App() {
   });
 
   useEffect(() => {
+    const loadProductsFromServer = async () => {
+      try {
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.products)) {
+            setActiveProducts(data.products);
+            localStorage.setItem('baked_by_doja_products', JSON.stringify(data.products));
+          }
+        }
+      } catch (err) {
+        console.error("Error loading products from server:", err);
+      }
+    };
+    loadProductsFromServer();
+  }, []);
+
+  const saveProducts = async (updated: Product[]) => {
+    setActiveProducts(updated);
+    localStorage.setItem('baked_by_doja_products', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    
+    try {
+      await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: updated })
+      });
+    } catch (e) {
+      console.error('Failed to sync products to database:', e);
+    }
+  };
+
+  useEffect(() => {
     const checkProducts = () => {
       try {
         const stored = localStorage.getItem('baked_by_doja_products');
         if (stored) {
-          setActiveProducts(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          setActiveProducts(prev => {
+            if (JSON.stringify(parsed) !== JSON.stringify(prev)) {
+              return parsed;
+            }
+            return prev;
+          });
         }
       } catch (e) {}
     };
-    const interval = setInterval(checkProducts, 1000);
+    const interval = setInterval(checkProducts, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -183,9 +223,7 @@ export default function App() {
             products={activeProducts}
             onDeleteProduct={(id) => {
               const updated = activeProducts.filter(p => p.id !== id);
-              localStorage.setItem('baked_by_doja_products', JSON.stringify(updated));
-              setActiveProducts(updated);
-              window.dispatchEvent(new Event('storage'));
+              saveProducts(updated);
             }}
           />
 
@@ -224,11 +262,7 @@ export default function App() {
           editProductOnLoad={editProductOnDashboard}
           onResetEditProductOnLoad={() => setEditProductOnDashboard(null)}
           products={activeProducts}
-          onProductsChange={(updated) => {
-            setActiveProducts(updated);
-            localStorage.setItem('baked_by_doja_products', JSON.stringify(updated));
-            window.dispatchEvent(new Event('storage'));
-          }}
+          onProductsChange={saveProducts}
           initialTab={dashboardTab}
         />
       )}
