@@ -43,6 +43,7 @@ jobs:
             dist
             package.json
             package-lock.json
+            web.config
 
   deploy:
     runs-on: ubuntu-latest
