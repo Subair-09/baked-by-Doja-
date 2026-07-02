@@ -489,7 +489,7 @@ export default function OrderModal({ product, isOpen, onClose, currentUser, onAu
                                 }`}
                               >
                                 <span className="text-xs font-bold font-sans">Pickup</span>
-                                <span className="text-[10px] opacity-60 font-medium">Osogbo Studio (Free)</span>
+                                <span className="text-[10px] opacity-60 font-medium">Ikotun Studio (Free)</span>
                               </button>
                             </div>
                           </div>
@@ -505,13 +505,13 @@ export default function OrderModal({ product, isOpen, onClose, currentUser, onAu
                                 required
                                 value={deliveryNote}
                                 onChange={(e) => setDeliveryNote(e.target.value)}
-                                placeholder="e.g. 12 Mall Road, Osogbo, Osun State"
+                                placeholder="e.g. 12 Mall Road, Phase 1, Ikotun, Lagos"
                                 className="w-full bg-white border border-chocolate/10 rounded-xl px-4 py-2.5 text-xs focus:border-caramel focus:outline-none resize-none"
                               />
                             </div>
                           ) : (
                             <div className="p-3 bg-beige/60 border border-chocolate/5 rounded-xl text-[11px] text-chocolate/75 mb-4 leading-relaxed">
-                              <strong>Pickup Location:</strong> Baked by Doja Studio, Hammed Oghere, Osogbo, Osun State. We will send you the exact pickup address and ready time.
+                              <strong>Pickup Location:</strong> Baked by Doja Studio, Hammed Oghere Ikotun, Lagos. We will send you the exact pickup address and ready time.
                             </div>
                           )}
                         </div>

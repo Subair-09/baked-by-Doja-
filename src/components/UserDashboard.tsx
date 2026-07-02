@@ -1918,7 +1918,7 @@ export default function UserDashboard({
                         <label className="block text-[10px] font-bold text-chocolate/60">Shipping Address & Driver Notes</label>
                         <textarea
                           rows={3}
-                          placeholder={deliveryType === 'pickup' ? 'Pickup at Doja Central Bakery: 12 Anike St, Osogbo, Osun State.' : 'Apartment, Street name, City, Landmark, dispatcher gate instructions...'}
+                          placeholder={deliveryType === 'pickup' ? 'Pickup at Doja Central Bakery: 12 Anike St, Lagos.' : 'Apartment, Street name, City, Landmark, dispatcher gate instructions...'}
                           value={deliveryNote}
                           onChange={(e) => setDeliveryNote(e.target.value)}
                           className="w-full bg-beige/5 border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none resize-none"
@@ -2540,7 +2540,7 @@ export default function UserDashboard({
                           </div>
 
                           <div className="bg-beige/10 p-3 rounded-xl border border-chocolate/5 mt-4 text-[10px] text-chocolate/60">
-                            <strong>Faridah's Culinary Note:</strong> Osun State dispatch logistics auto-optimizes based on thermal cooling parameters to ensure banana bread slices remain warm during transit.
+                            <strong>Faridah's Culinary Note:</strong> Lagos dispatch logistics auto-optimizes based on thermal cooling parameters to ensure banana bread slices remain warm during transit.
                           </div>
                         </div>
                       </div>

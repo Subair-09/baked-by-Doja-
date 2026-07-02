@@ -23,7 +23,7 @@ export default function FAQ() {
           </h2>
           <div className="h-1 w-20 bg-banana mx-auto rounded-full" />
           <p className="text-sm sm:text-base text-chocolate/75 leading-relaxed">
-            Everything you need to know about our sunrise baking schedule, local Osun State deliveries, bulk orders, and delicious storing secrets.
+            Everything you need to know about our sunrise baking schedule, local Lagos deliveries, bulk orders, and delicious storing secrets.
           </p>
         </div>
 
