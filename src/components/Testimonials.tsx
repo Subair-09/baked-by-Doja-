@@ -17,7 +17,7 @@ export default function Testimonials() {
           </h2>
           <div className="h-1 w-20 bg-banana mx-auto rounded-full" />
           <p className="text-sm sm:text-base text-chocolate/75 leading-relaxed">
-            Don’t just take our word for it. Here is what our lovely community in Lagos and beyond says about our comforting homemade banana bread loaves.
+            Don’t just take our word for it. Here is what our lovely community in Osun State and beyond says about our comforting homemade banana bread loaves.
           </p>
         </div>
 

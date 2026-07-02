@@ -66,7 +66,7 @@ export const testimonials: Testimonial[] = [
     id: '1',
     name: 'Tunde Ademola',
     role: 'Corporate HR Executive',
-    review: "The softest banana bread I've ever tasted in Lagos! We ordered 20 loaves for our corporate breakfast meeting, and everyone was raving about it. Absolutely moist and delightful.",
+    review: "The softest banana bread I've ever tasted in Osun State! We ordered 20 loaves for our corporate breakfast meeting, and everyone was raving about it. Absolutely moist and delightful.",
     rating: 5,
     image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150'
   },

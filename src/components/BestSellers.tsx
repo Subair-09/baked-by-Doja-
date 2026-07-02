@@ -83,7 +83,7 @@ export default function BestSellers({
           </h2>
           <div className="h-1 w-20 bg-banana mx-auto rounded-full" />
           <p className="text-sm sm:text-base text-chocolate/75 leading-relaxed">
-            Every loaf is baked fresh to order in Lagos using hand-selected sweet bananas, organic farm-fresh eggs, and rich premium butter. Order now and experience premium luxury comfort in every bite.
+            Every loaf is baked fresh to order in Osun State using hand-selected sweet bananas, organic farm-fresh eggs, and rich premium butter. Order now and experience premium luxury comfort in every bite.
           </p>
         </div>
 
