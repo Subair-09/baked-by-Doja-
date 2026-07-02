@@ -71,10 +71,10 @@ export default function HowItWorks() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: idx * 0.1 }}
-                className="flex flex-col items-center text-center space-y-4 group"
+                className="relative flex flex-col items-center text-center space-y-4 group pt-4"
               >
                 {/* Step Number Badge */}
-                <div className="absolute top-[-10px] bg-chocolate text-cream font-sans font-black text-xs h-6 w-6 rounded-full flex items-center justify-center shadow-md">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-chocolate text-cream font-sans font-black text-xs h-6 w-6 rounded-full flex items-center justify-center shadow-md z-20">
                   {step.id}
                 </div>
 
