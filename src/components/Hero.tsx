@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, MessageCircle, ArrowRight } from 'lucide-react';
+import { MessageCircle, ArrowRight } from 'lucide-react';
 
 interface HeroProps {
   onOrderNowClick: () => void;
@@ -114,7 +114,7 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
             {/* Image Wrapper with organic frame shadow */}
             <div className="relative w-full max-w-md sm:max-w-lg aspect-square sm:aspect-[4/3] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/60 animate-float bg-chocolate/10">
               <img
-                src="https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=1000"
+                src="https://imgur.com/hI3nWDi.png"
                 alt="Freshly sliced Baked by Doja Banana Bread served with walnuts, bananas, and morning coffee"
                 className="w-full h-full object-cover select-none"
                 referrerPolicy="no-referrer"
@@ -125,35 +125,6 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
                 <span>Warm &amp; Moist</span>
               </div>
             </div>
-
-            {/* Floating Badge */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 100, delay: 0.6 }}
-              className="absolute -top-4 -right-2 sm:-right-4 bg-white/95 backdrop-blur-sm border border-chocolate/10 p-4 rounded-3xl shadow-xl flex items-center space-x-3"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-banana text-chocolate">
-                <Sparkles className="h-5 w-5 fill-chocolate" />
-              </div>
-              <div>
-                <div className="flex items-center text-amber-500 text-sm">
-                  {'★'.repeat(5)}
-                </div>
-                <p className="text-xs font-black text-chocolate font-serif">500+ Happy Customers</p>
-              </div>
-            </motion.div>
-
-            {/* Secondary Floating Accent Badge - Natural ingredients */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 100, delay: 0.8 }}
-              className="absolute bottom-6 -left-2 sm:-left-6 bg-cream/95 backdrop-blur-sm border border-leaf/20 px-4 py-2.5 rounded-2xl shadow-lg flex items-center space-x-2"
-            >
-              <span className="text-lg"></span>
-              <p className="text-[11px] font-semibold text-chocolate">100% Wholesome Ingredients</p>
-            </motion.div>
           </motion.div>
         </div>
       </div>
