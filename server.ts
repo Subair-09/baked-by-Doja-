@@ -754,7 +754,11 @@ app.post("/api/upload", upload.single("image"), async (req: express.Request, res
       const containerClient = blobServiceClient.getContainerClient(containerName);
       
       // Ensure container exists (using default private access to respect storage account policy)
-      await containerClient.createIfNotExists();
+      try {
+        await containerClient.createIfNotExists();
+      } catch (containerErr: any) {
+        console.warn("⚠️ Could not check or create container (this is normal if using a restricted SAS token or if container already exists):", containerErr.message);
+      }
 
       // Create a unique blob name
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
