@@ -21,6 +21,7 @@ interface UserDashboardProps {
   products?: Product[];
   onProductsChange?: (products: Product[]) => void;
   initialTab?: string;
+  onRefreshProducts?: () => Promise<Product[] | null>;
 }
 
 interface CartItem {
@@ -43,7 +44,7 @@ const STATUS_STEPS = [
 
 export default function UserDashboard({ 
   isOpen, onClose, currentUser, onOrderNowClick, onAuthSuccess, editProductOnLoad, onResetEditProductOnLoad,
-  products: propProducts, onProductsChange, initialTab
+  products: propProducts, onProductsChange, initialTab, onRefreshProducts
 }: UserDashboardProps) {
   const [currentTab, setCurrentTab] = useState<string>('browse');
 
@@ -54,6 +55,7 @@ export default function UserDashboard({
   }, [isOpen, initialTab]);
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; source: string }>({ connected: false, source: 'Checking...' });
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -380,6 +382,30 @@ export default function UserDashboard({
       }
     } catch (err) {
       console.error('Failed to fetch public settings:', err);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const promises: Promise<any>[] = [
+        fetchOrders(),
+        checkDb(),
+        fetchPublicPaystackKey()
+      ];
+      if (currentUser?.role === 'admin') {
+        promises.push(fetchUsers());
+      }
+      if (onRefreshProducts) {
+        promises.push(onRefreshProducts());
+      }
+      await Promise.allSettled(promises);
+      triggerToast("All dashboard data synced in real-time!", "success");
+    } catch (e) {
+      console.error("Refresh error:", e);
+      triggerToast("Failed to refresh some data.", "error");
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -1381,12 +1407,13 @@ export default function UserDashboard({
               {/* Top info and fast action */}
               <div className="flex items-center gap-2 flex-wrap">
                 <button
-                  onClick={fetchOrders}
-                  disabled={isLoading}
-                  className="px-3 py-1.5 bg-white border border-chocolate/10 rounded-xl text-[10px] font-bold text-chocolate/80 hover:bg-beige/40 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || isLoading}
+                  className="px-3 py-1.5 bg-white border border-chocolate/10 rounded-xl text-[10px] font-bold text-chocolate/80 hover:bg-beige/40 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm transition-all"
+                  title="Refresh all orders, menu products, and connection status in real-time"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-                  <span>Sync Server Database</span>
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshing ? 'Refreshing Hub...' : 'Sync Server Database'}</span>
                 </button>
                 <button
                   onClick={onClose}
@@ -2412,20 +2439,32 @@ export default function UserDashboard({
                       <p className="text-[11px] text-chocolate/50">Manage your fresh-baking recipes, incoming customer transactions, and ingredient supplies.</p>
                     </div>
 
-                    <div className="flex flex-wrap gap-1 bg-beige/10 p-1.5 rounded-xl border border-chocolate/5">
-                      {(['overview', 'products', 'orders', 'customers', 'inventory', 'reviews', 'settings'] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => setAdminSubTab(tab)}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                            adminSubTab === tab
-                              ? 'bg-chocolate text-white shadow-sm'
-                              : 'text-chocolate/60 hover:text-chocolate hover:bg-beige/15'
-                          }`}
-                        >
-                          {tab}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={handleRefresh}
+                        disabled={isRefreshing || isLoading}
+                        className="px-3.5 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200/50 hover:bg-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm transition-all"
+                        title="Sync administrative database metrics, products, and orders in real-time"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isLoading ? 'animate-spin' : ''}`} />
+                        <span>{isRefreshing ? 'Refreshing...' : 'Refresh Real-time'}</span>
+                      </button>
+
+                      <div className="flex flex-wrap gap-1 bg-beige/10 p-1.5 rounded-xl border border-chocolate/5">
+                        {(['overview', 'products', 'orders', 'customers', 'inventory', 'reviews', 'settings'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => setAdminSubTab(tab)}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              adminSubTab === tab
+                                ? 'bg-chocolate text-white shadow-sm'
+                                : 'text-chocolate/60 hover:text-chocolate hover:bg-beige/15'
+                            }`}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

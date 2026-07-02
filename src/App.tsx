@@ -61,6 +61,24 @@ export default function App() {
     }
   };
 
+  const refreshProducts = async () => {
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.products)) {
+          setActiveProducts(data.products);
+          localStorage.setItem('baked_by_doja_products', JSON.stringify(data.products));
+          window.dispatchEvent(new Event('storage'));
+          return data.products;
+        }
+      }
+    } catch (err) {
+      console.error("Error loading products from server:", err);
+    }
+    return null;
+  };
+
   useEffect(() => {
     const checkProducts = () => {
       try {
@@ -263,6 +281,7 @@ export default function App() {
           onResetEditProductOnLoad={() => setEditProductOnDashboard(null)}
           products={activeProducts}
           onProductsChange={saveProducts}
+          onRefreshProducts={refreshProducts}
           initialTab={dashboardTab}
         />
       )}
