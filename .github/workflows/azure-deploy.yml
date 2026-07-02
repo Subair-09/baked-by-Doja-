@@ -43,6 +43,7 @@ jobs:
             dist
             package.json
             package-lock.json
+            server.js
             web.config
 
   deploy:
