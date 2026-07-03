@@ -1335,7 +1335,7 @@ export default function UserDashboard({
       return;
     }
 
-    const orderToReview = orders.find(o => o.orderId === reviewOrderId);
+    const orderToReview = displayOrders.find(o => o.orderId === reviewOrderId);
     const newReview = {
       id: `REV-${Math.floor(100000 + Math.random() * 900000)}`,
       orderId: reviewOrderId,
@@ -1366,15 +1366,20 @@ export default function UserDashboard({
 
   if (!isOpen) return null;
 
-  const activeOrder = orders.find(o => o.orderId === selectedOrderId) || orders[0];
-  const nonRejectedOrders = orders.filter(o => o.status !== 'rejected');
+  // Filter orders for the customer so that only paid/successful transactions display
+  const displayOrders = currentUser && currentUser.role === 'admin'
+    ? orders
+    : orders.filter(o => o.paymentStatus === 'paid');
+
+  const activeOrder = displayOrders.find(o => o.orderId === selectedOrderId) || displayOrders[0];
+  const nonRejectedOrders = displayOrders.filter(o => o.status !== 'rejected');
   const totalQuantity = nonRejectedOrders.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
   const totalSpend = nonRejectedOrders.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
   const clientLoyaltyPoints = currentUser ? (loyaltyPoints[currentUser.phone] ?? (totalQuantity * 150)) : 0;
 
   // Active items counts
   const totalCartQty = cartItems.reduce((acc, c) => acc + c.quantity, 0);
-  const activeBakes = orders.filter(o => o.status !== 'delivered').length;
+  const activeBakes = displayOrders.filter(o => o.status !== 'delivered').length;
 
   // Sidebar link items
   const menuItems = [
@@ -1385,7 +1390,7 @@ export default function UserDashboard({
     { key: 'checkout', label: 'Checkout', icon: Truck, badge: null },
     { key: 'payment', label: 'Make Payment', icon: CreditCard, badge: cartItems.length > 0 ? 'Ready' : null, badgeColor: 'bg-emerald-500 text-white' },
     { key: 'track', label: 'Track Order', icon: Clock, badge: activeBakes > 0 ? activeBakes : null, badgeColor: 'bg-banana text-chocolate font-black animate-bounce' },
-    { key: 'history', label: 'View Order History', icon: Award, badge: orders.length > 0 ? orders.length : null, badgeColor: 'bg-chocolate/10 text-chocolate' },
+    { key: 'history', label: 'View Order History', icon: Award, badge: displayOrders.length > 0 ? displayOrders.length : null, badgeColor: 'bg-chocolate/10 text-chocolate' },
     { key: 'review', label: 'Leave Review', icon: MessageSquare, badge: null },
   ];
 
@@ -2335,7 +2340,7 @@ export default function UserDashboard({
               {/* TAB 7: TRACK ORDER */}
               {currentTab === 'track' && (
                 <div className="bg-white border border-chocolate/5 rounded-3xl p-6 sm:p-8 shadow-sm">
-                  {orders.length === 0 ? (
+                  {displayOrders.length === 0 ? (
                     <div className="text-center py-16 space-y-4">
                       <span className="text-5xl"></span>
                       <h4 className="font-serif font-black text-lg text-chocolate">No baking tracking records found!</h4>
@@ -2354,7 +2359,7 @@ export default function UserDashboard({
                       <div className="lg:col-span-4 space-y-3 border-r border-chocolate/5 pr-0 lg:pr-5">
                         <label className="block text-[10px] font-black uppercase text-chocolate/40 tracking-wider">Select Baking Slot To Track</label>
                         <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-                          {orders.map((o) => {
+                          {displayOrders.map((o) => {
                             const isSel = o.orderId === selectedOrderId;
                             return (
                               <button
@@ -2460,7 +2465,7 @@ export default function UserDashboard({
               {/* TAB 8: VIEW ORDER HISTORY */}
               {currentTab === 'history' && (
                 <div className="bg-white border border-chocolate/5 rounded-3xl p-6 sm:p-8 shadow-sm">
-                  {orders.length === 0 ? (
+                  {displayOrders.length === 0 ? (
                     <div className="text-center py-16 space-y-4">
                       <span className="text-5xl"></span>
                       <h4 className="font-serif font-black text-lg text-chocolate">No order history found</h4>
@@ -2488,7 +2493,7 @@ export default function UserDashboard({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-chocolate/5">
-                            {orders.map((o) => (
+                            {displayOrders.map((o) => (
                               <tr key={o.orderId} className="hover:bg-beige/10 transition-colors">
                                 <td className="p-3.5 font-mono font-bold text-caramel">{o.orderId}</td>
                                 <td className="p-3.5 font-semibold">{o.productTitle}</td>
@@ -2532,7 +2537,7 @@ export default function UserDashboard({
                     <form onSubmit={handleSubmitReview} className="md:col-span-6 space-y-4">
                       <h5 className="text-xs font-black uppercase text-chocolate/50 tracking-wider">Leave Bakery Feedback</h5>
                       
-                      {orders.length === 0 ? (
+                      {displayOrders.length === 0 ? (
                         <p className="text-xs text-chocolate/50 bg-beige/10 p-4 rounded-xl">You must order and receive a warm loaf before leaving chef feedback.</p>
                       ) : (
                         <>
@@ -2545,7 +2550,7 @@ export default function UserDashboard({
                               required
                             >
                               <option value="">-- Choose past purchase --</option>
-                              {orders.map(o => (
+                              {displayOrders.map(o => (
                                 <option key={o.orderId} value={o.orderId}>{o.orderId} • {o.productTitle}</option>
                               ))}
                             </select>
@@ -2682,7 +2687,7 @@ export default function UserDashboard({
 
                   {/* SUB-TAB 1: OVERVIEW & SALES REPORTS */}
                   {adminSubTab === 'overview' && (() => {
-                    const validOrders = orders.filter(o => o.status !== 'rejected');
+                    const validOrders = orders.filter(o => o.status !== 'rejected' && o.paymentStatus === 'paid');
                     
                     // Compute current week boundaries (Monday to Sunday)
                     const getWeekData = () => {
@@ -3432,7 +3437,14 @@ export default function UserDashboard({
                                     )}
                                   </td>
                                   <td className="p-3 font-extrabold text-chocolate">
-                                    ₦{(o.totalAmount || 6500).toLocaleString()}
+                                    <div>₦{(o.totalAmount || 6500).toLocaleString()}</div>
+                                    <div className="mt-1">
+                                      <span className={`inline-block text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                        o.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-950' : 'bg-rose-100 text-rose-950'
+                                      }`}>
+                                        {o.paymentStatus === 'paid' ? '✅ Paid' : '❌ Unpaid'}
+                                      </span>
+                                    </div>
                                   </td>
                                   <td className="p-3 text-[10px] max-w-[130px] truncate" title={o.isGift ? `Gift card details: To: ${o.giftNote?.to || ''}, message: ${o.giftNote?.message || ''}` : 'No gift bundle'}>
                                     {o.isGift ? (
