@@ -469,14 +469,25 @@ export default function UserDashboard({
 
   // Automatically verify redirected Paystack payments on mount/load
   useEffect(() => {
-    if (!isOpen) return;
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        // Clear payment loading screen if restored from browser back-forward cache
+        setIsPaying(false);
+      }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    if (!isOpen) {
+      return () => {
+        window.removeEventListener('pageshow', handlePageShow);
+      };
+    }
 
     const queryParams = new URLSearchParams(window.location.search);
-    const hasSuccess = queryParams.get('payment_success');
     const orderId = queryParams.get('order_id');
     const reference = queryParams.get('reference') || queryParams.get('trxref');
 
-    if (hasSuccess === 'true' && orderId && reference) {
+    if (orderId && reference) {
       const verifyRedirectedPayment = async () => {
         setIsPaying(true);
         setPaymentStepText("Verifying your Paystack payment transaction...");
@@ -507,7 +518,21 @@ export default function UserDashboard({
       };
 
       verifyRedirectedPayment();
+    } else {
+      // If the page was loaded with an order_id or payment_success param but without reference (cancelled payment)
+      if (queryParams.has('order_id') || queryParams.has('payment_success')) {
+        setIsPaying(false);
+        // Clean up parameters so URL looks pristine
+        try {
+          const cleanUrl = window.location.origin + window.location.pathname + window.location.hash;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch {}
+      }
     }
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+    };
   }, [isOpen]);
 
   // ================= ADMIN BUSINESS LOGIC =================
@@ -1246,7 +1271,7 @@ export default function UserDashboard({
           email: userEmail,
           amount: getCartGrandTotal() * 100, // NGN in kobo
           orderId,
-          callbackUrl: window.location.origin + window.location.pathname + `?payment_success=true&order_id=${orderId}`
+          callbackUrl: window.location.origin + window.location.pathname + `?order_id=${orderId}`
         })
       });
 
@@ -2281,6 +2306,13 @@ export default function UserDashboard({
                           <div className="text-center py-2.5 space-y-2.5">
                             <div className="w-6 h-6 border-2 border-banana border-t-transparent rounded-full animate-spin mx-auto" />
                             <p className="text-[11px] font-bold text-banana animate-pulse">{paymentStepText}</p>
+                            <button
+                              type="button"
+                              onClick={() => setIsPaying(false)}
+                              className="text-[9px] bg-white/10 hover:bg-white/15 text-banana px-3 py-1.5 rounded-lg font-extrabold uppercase tracking-widest mt-1 cursor-pointer transition-colors"
+                            >
+                              Cancel & Return
+                            </button>
                           </div>
                         ) : (
                           <button
