@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import { BlobServiceClient } from "@azure/storage-blob";
 import crypto from "crypto";
+import helmet from "helmet";
 
 dotenv.config();
 
@@ -19,6 +20,94 @@ const upload = multer({
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+app.disable("x-powered-by");
+
+// Apply Helmet with customized production-grade security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          "https://js.paystack.co",
+          "https://checkout.paystack.com",
+          "https://*.paystack.co"
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com"
+        ],
+        fontSrc: [
+          "'self'",
+          "data:",
+          "https://fonts.gstatic.com"
+        ],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://images.unsplash.com",
+          "https://imgur.com",
+          "https://*.imgur.com",
+          "https://*.blob.core.windows.net",
+          "https://paystack.com",
+          "https://*.paystack.com",
+          "https://*.paystack.co",
+          "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net"
+        ],
+        connectSrc: [
+          "'self'",
+          "ws:",
+          "wss:",
+          "https://api.paystack.co",
+          "https://checkout.paystack.com",
+          "https://*.paystack.co",
+          "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net",
+          "https://*.run.app",
+          "http://localhost:*",
+          "https://localhost:*"
+        ],
+        frameSrc: [
+          "'self'",
+          "https://js.paystack.co",
+          "https://checkout.paystack.com",
+          "https://checkout.paystack.co",
+          "https://*.paystack.co",
+          "https://*.paystack.com"
+        ],
+        frameAncestors: [
+          "'self'",
+          "https://*.google.com",
+          "https://ai.studio",
+          "https://*.run.app",
+          "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net"
+        ],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: {
+      policy: "strict-origin-when-cross-origin",
+    },
+    xContentTypeOptions: true,
+    dnsPrefetchControl: { allow: false },
+    frameguard: false, // Disabled in favor of frameAncestors so the preview iframe in AI Studio can render the app
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false, // Disabled to allow loading cross-origin assets (like Unsplash images)
+    crossOriginOpenerPolicy: false, // Disabled to ensure popups/redirects (like Paystack) work seamlessly
+    xPoweredBy: false,
+  })
+);
 
 app.use(express.json({
   verify: (req: any, res, buf) => {
@@ -56,15 +145,12 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, x-paystack-signature");
 
+  // Enable Permissions-Policy header
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=*");
+
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
-
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN"); // Allow preview iframe but protect from general framing
-  res.setHeader("X-XSS-Protection", "1; mode=block");
-  res.setHeader("Content-Security-Policy", "upgrade-insecure-requests;");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
 
   if (process.env.NODE_ENV === 'production') {
     const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
