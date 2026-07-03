@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { BlobServiceClient } from "@azure/storage-blob";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -19,7 +20,28 @@ const upload = multer({
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.use(express.json({
+  verify: (req: any, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
+// Security & HTTPS Enforcement Middleware
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Content-Security-Policy", "upgrade-insecure-requests;");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  if (process.env.NODE_ENV === 'production') {
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    if (!isSecure) {
+      return res.redirect(`https://${req.headers.host}${req.url}`);
+    }
+  }
+  next();
+});
 
 // In-Memory Fallback Store (to prevent crashing and maintain functionality when Azure PG is not configured)
 const fallbackUsers: any[] = [];
@@ -715,11 +737,11 @@ app.get("/api/orders", async (req, res) => {
       let result;
       if (phone === 'admin') {
         result = await dbPool.query(
-          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders ORDER BY date DESC"
+          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE payment_status = 'paid' ORDER BY date DESC"
         );
       } else {
         result = await dbPool.query(
-          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE customer_phone = $1 ORDER BY date DESC",
+          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE customer_phone = $1 AND payment_status = 'paid' ORDER BY date DESC",
           [phone]
         );
       }
@@ -732,9 +754,9 @@ app.get("/api/orders", async (req, res) => {
     // In-Memory Fallback
     let userOrders;
     if (phone === 'admin') {
-      userOrders = [...fallbackOrders];
+      userOrders = fallbackOrders.filter((o) => o.paymentStatus === 'paid');
     } else {
-      userOrders = fallbackOrders.filter((o) => o.customerPhone === phone);
+      userOrders = fallbackOrders.filter((o) => o.customerPhone === phone && o.paymentStatus === 'paid');
     }
     // Sort descending by date
     userOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -952,10 +974,213 @@ app.post("/api/payments/initialize", async (req, res) => {
   }
 });
 
-// 5g. Verify Paystack Payment
-app.get("/api/payments/verify/:reference", async (req, res) => {
+// Simple in-memory rate limiter for verification endpoint
+const verificationRateLimit = new Map<string, { count: number, resetTime: number }>();
+
+const rateLimiterMiddleware = (req: any, res: any, next: any) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const limitWindow = 60 * 1000; // 1 minute
+  const maxRequests = 15; // max 15 verification attempts per minute
+
+  const record = verificationRateLimit.get(ip);
+  if (!record || now > record.resetTime) {
+    verificationRateLimit.set(ip, { count: 1, resetTime: now + limitWindow });
+    return next();
+  }
+
+  record.count++;
+  if (record.count > maxRequests) {
+    return res.status(429).json({
+      success: false,
+      message: "Too many verification requests. Please wait a minute before retrying.",
+      status: "failed"
+    });
+  }
+
+  next();
+};
+
+// Helper function to dynamically ensure the audit logs table is created
+const ensureAuditTable = async (client: any) => {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS doja_payment_audit (
+      id SERIAL PRIMARY KEY,
+      user_phone VARCHAR(255),
+      reference VARCHAR(255) UNIQUE,
+      amount INTEGER,
+      ip_address VARCHAR(255),
+      status VARCHAR(50),
+      raw_payload JSONB,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+};
+
+// Unified helper to save/process verified orders securely inside a transaction
+const processVerifiedPayment = async (reference: string, amount: number, rawData: any, orderId?: string, clientIp?: string, requestingPhone?: string) => {
+  const dbPool = await getDbPool();
+  
+  // Extract order metadata
+  let orderData = null;
+  if (rawData.metadata && rawData.metadata.orderData) {
+    orderData = rawData.metadata.orderData;
+  } else if (rawData.metadata) {
+    try {
+      const parsedMeta = typeof rawData.metadata === 'string' ? JSON.parse(rawData.metadata) : rawData.metadata;
+      orderData = parsedMeta.orderData;
+    } catch (e) {
+      console.error("Error parsing metadata:", e);
+    }
+  }
+
+  const derivedOrderId = orderId || orderData?.orderId || rawData.reference;
+  if (!derivedOrderId) {
+    throw new Error("Could not determine a valid Order ID for this transaction.");
+  }
+
+  // 1. Secure Currency Check
+  if (rawData.currency && rawData.currency.toUpperCase() !== 'NGN') {
+    throw new Error(`Security validation failed: invalid currency ${rawData.currency}. Only NGN is supported.`);
+  }
+
+  // 2. Customer Validation (Confirm payment belongs to requesting user)
+  if (requestingPhone && orderData && orderData.customerPhone) {
+    if (orderData.customerPhone !== requestingPhone) {
+      throw new Error(`Security validation failed: Payment belongs to ${orderData.customerPhone}, but verification requested for ${requestingPhone}.`);
+    }
+  }
+
+  // 3. Secure Amount Match Validation
+  if (orderData && orderData.totalAmount) {
+    const expectedAmountKobo = Math.round(orderData.totalAmount * 100);
+    const actualPaidKobo = Math.round(amount);
+    if (actualPaidKobo < expectedAmountKobo - 100) {
+      throw new Error(`Security validation failed: Paid amount ₦${actualPaidKobo / 100} is less than required order total ₦${orderData.totalAmount}.`);
+    }
+  }
+
+  if (dbPool && tablesInitialized) {
+    const client = await dbPool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Check if reference already exists (Double Spend Check)
+      const dupCheck = await client.query(
+        "SELECT order_id, payment_status FROM doja_orders WHERE payment_reference = $1",
+        [reference]
+      );
+      if (dupCheck.rows.length > 0) {
+        const existingRec = dupCheck.rows[0];
+        // Idempotency: If this reference already marked paid for the same order, succeed gracefully!
+        if (existingRec.order_id === derivedOrderId && existingRec.payment_status === 'paid') {
+          await client.query("COMMIT");
+          return { success: true, isIdempotent: true, orderData };
+        }
+        throw new Error("Security validation failed: This transaction reference has already been claimed/processed.");
+      }
+
+      // Check if order already exists
+      const existingOrder = await client.query("SELECT order_id FROM doja_orders WHERE order_id = $1 FOR UPDATE", [derivedOrderId]);
+      if (existingOrder.rows.length === 0 && orderData) {
+        // Insert as fully paid
+        await client.query(
+          `INSERT INTO doja_orders 
+          (order_id, customer_name, customer_phone, product_title, quantity, topping, delivery_type, is_gift, gift_note, delivery_note, total_amount, status, payment_status, payment_reference) 
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', 'paid', $12)`,
+          [
+            orderData.orderId || derivedOrderId,
+            orderData.customerName,
+            orderData.customerPhone,
+            orderData.productTitle,
+            orderData.quantity,
+            orderData.topping,
+            orderData.deliveryType,
+            orderData.isGift || false,
+            orderData.giftNote ? JSON.stringify(orderData.giftNote) : null,
+            orderData.deliveryNote || null,
+            orderData.totalAmount,
+            reference
+          ]
+        );
+        console.log(`Inserted paid order ${derivedOrderId} inside atomic SQL transaction.`);
+      } else {
+        // Update payment status to paid
+        await client.query(
+          "UPDATE doja_orders SET payment_status = 'paid', payment_reference = $1 WHERE order_id = $2",
+          [reference, derivedOrderId]
+        );
+        console.log(`Updated existing order ${derivedOrderId} to paid inside atomic SQL transaction.`);
+      }
+
+      // Record Detailed Audit Log in same transaction
+      await ensureAuditTable(client);
+      await client.query(
+        `INSERT INTO doja_payment_audit (user_phone, reference, amount, ip_address, status, raw_payload)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (reference) DO UPDATE SET status = EXCLUDED.status, raw_payload = EXCLUDED.raw_payload`,
+        [
+          orderData ? orderData.customerPhone : (requestingPhone || 'unknown'),
+          reference,
+          Math.round(amount),
+          clientIp || 'unknown',
+          'success',
+          JSON.stringify(rawData)
+        ]
+      );
+
+      await client.query("COMMIT");
+      return { success: true, isIdempotent: false, orderData };
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      console.error("Database transaction rolled back:", txErr);
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } else {
+    // In-Memory Fallback
+    const isDup = fallbackOrders.some(o => o.paymentReference === reference && o.paymentStatus === 'paid');
+    if (isDup) {
+      const match = fallbackOrders.find(o => o.orderId === derivedOrderId && o.paymentReference === reference);
+      if (match) {
+        return { success: true, isIdempotent: true, orderData };
+      }
+      throw new Error("Security validation failed: This transaction reference has already been claimed in local memory.");
+    }
+
+    const order = fallbackOrders.find(o => o.orderId === derivedOrderId);
+    if (order) {
+      order.paymentStatus = 'paid';
+      order.paymentReference = reference;
+    } else if (orderData) {
+      fallbackOrders.push({
+        orderId: orderData.orderId || derivedOrderId,
+        customerName: orderData.customerName,
+        customerPhone: orderData.customerPhone,
+        productTitle: orderData.productTitle,
+        quantity: orderData.quantity,
+        topping: orderData.topping,
+        deliveryType: orderData.deliveryType,
+        isGift: orderData.isGift || false,
+        giftNote: orderData.giftNote || null,
+        deliveryNote: orderData.deliveryNote || null,
+        totalAmount: orderData.totalAmount,
+        status: 'pending',
+        date: new Date().toISOString(),
+        paymentStatus: 'paid',
+        paymentReference: reference
+      });
+    }
+    console.log(`Processed paid order ${derivedOrderId} in fallback memory.`);
+    return { success: true, isIdempotent: false, orderData };
+  }
+};
+
+// 5g. Verify Paystack Payment with Rate Limiting, Customer Verification, Idempotency & DB Transactions
+app.get("/api/payments/verify/:reference", rateLimiterMiddleware, async (req, res) => {
   const { reference } = req.params;
-  const { orderId } = req.query;
+  const { orderId, phone } = req.query;
 
   const dbPool = await getDbPool();
   let secretKey = "";
@@ -990,90 +1215,25 @@ app.get("/api/payments/verify/:reference", async (req, res) => {
 
     const data: any = await paystackRes.json();
     if (data.status && data.data && data.data.status === 'success') {
-      let orderData = null;
-      if (data.data.metadata && data.data.metadata.orderData) {
-        orderData = data.data.metadata.orderData;
-      } else if (data.data.metadata) {
-        try {
-          const parsedMeta = typeof data.data.metadata === 'string' ? JSON.parse(data.data.metadata) : data.data.metadata;
-          orderData = parsedMeta.orderData;
-        } catch (e) {
-          console.error("Error parsing metadata:", e);
-        }
-      }
-
-      if (dbPool && tablesInitialized && orderId) {
-        try {
-          // Check if order already exists in database
-          const existingOrder = await dbPool.query("SELECT order_id FROM doja_orders WHERE order_id = $1", [orderId]);
-          if (existingOrder.rows.length === 0 && orderData) {
-            // It does not exist yet! Let's insert it now as a PAID order!
-            await dbPool.query(
-              `INSERT INTO doja_orders 
-              (order_id, customer_name, customer_phone, product_title, quantity, topping, delivery_type, is_gift, gift_note, delivery_note, total_amount, status, payment_status, payment_reference) 
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', 'paid', $12)`,
-              [
-                orderData.orderId || orderId,
-                orderData.customerName,
-                orderData.customerPhone,
-                orderData.productTitle,
-                orderData.quantity,
-                orderData.topping,
-                orderData.deliveryType,
-                orderData.isGift || false,
-                orderData.giftNote ? JSON.stringify(orderData.giftNote) : null,
-                orderData.deliveryNote || null,
-                orderData.totalAmount,
-                reference
-              ]
-            );
-            console.log(`Inserted paid order ${orderId} upon successful Paystack verification.`);
-          } else {
-            // If it already exists, just update payment status to 'paid' and reference
-            await dbPool.query(
-              "UPDATE doja_orders SET payment_status = 'paid', payment_reference = $1 WHERE order_id = $2",
-              [reference, orderId]
-            );
-            console.log(`Updated existing order ${orderId} to paid upon successful Paystack verification.`);
-          }
-        } catch (dbErr) {
-          console.error("Error saving verified order to DB:", dbErr);
-        }
-      } else if (orderId) {
-        // Update in-memory fallback list
-        const order = fallbackOrders.find(o => o.orderId === orderId);
-        if (order) {
-          order.paymentStatus = 'paid';
-          order.paymentReference = reference;
-        } else if (orderData) {
-          fallbackOrders.push({
-            orderId: orderData.orderId || orderId,
-            customerName: orderData.customerName,
-            customerPhone: orderData.customerPhone,
-            productTitle: orderData.productTitle,
-            quantity: orderData.quantity,
-            topping: orderData.topping,
-            deliveryType: orderData.deliveryType,
-            isGift: orderData.isGift || false,
-            giftNote: orderData.giftNote || null,
-            deliveryNote: orderData.deliveryNote || null,
-            totalAmount: orderData.totalAmount,
-            status: 'pending',
-            date: new Date().toISOString(),
-            paymentStatus: 'paid',
-            paymentReference: reference
-          });
-        }
-      }
+      const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      const result = await processVerifiedPayment(
+        reference,
+        data.data.amount,
+        data.data,
+        orderId as string,
+        clientIp as string,
+        phone as string
+      );
 
       return res.json({
         success: true,
         status: "success",
         data: data.data,
-        orderData: orderData
+        orderData: result.orderData,
+        isIdempotent: result.isIdempotent
       });
     } else {
-      return res.json({
+      return res.status(400).json({
         success: false,
         message: data.message || "Paystack verification unsuccessful.",
         status: data.data?.status || "failed"
@@ -1081,7 +1241,66 @@ app.get("/api/payments/verify/:reference", async (req, res) => {
     }
   } catch (err: any) {
     console.error("❌ Paystack Verification Error:", err);
-    return res.status(500).json({ error: "Failed to verify transaction." });
+    return res.status(500).json({ success: false, message: err.message || "Failed to verify transaction." });
+  }
+});
+
+// 5h. Secure Paystack Webhook (x-paystack-signature validation, event handling & double spend check)
+app.post("/api/payments/webhook", async (req: any, res: any) => {
+  const signature = req.headers['x-paystack-signature'];
+  if (!signature) {
+    return res.status(400).send("Missing x-paystack-signature header");
+  }
+
+  const dbPool = await getDbPool();
+  let secretKey = "";
+
+  if (dbPool && tablesInitialized) {
+    try {
+      const result = await dbPool.query("SELECT value FROM doja_settings WHERE key = 'paystack_secret_key'");
+      secretKey = result.rows[0]?.value || process.env.PAYSTACK_SECRET_KEY || "";
+    } catch (err) {
+      console.error("Error retrieving Paystack secret key for webhook:", err);
+    }
+  } else {
+    secretKey = fallbackSettings['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || "";
+  }
+
+  if (!secretKey) {
+    return res.status(400).send("Paystack is not configured on this server");
+  }
+
+  // Compute and compare signature securely (HMAC SHA512)
+  const computedHash = crypto
+    .createHmac("sha512", secretKey)
+    .update(req.rawBody || JSON.stringify(req.body))
+    .digest("hex");
+
+  if (computedHash !== signature) {
+    return res.status(401).send("Invalid webhook signature");
+  }
+
+  // Respond early to Paystack with 200 OK
+  res.status(200).json({ received: true });
+
+  // Process the webhook asynchronously to prevent blocking Paystack
+  const event = req.body;
+  if (event && event.event === "charge.success") {
+    const trxData = event.data;
+    try {
+      console.log(`Processing Paystack webhook charge.success event for ref: ${trxData.reference}`);
+      const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+      await processVerifiedPayment(
+        trxData.reference,
+        trxData.amount,
+        trxData,
+        undefined,
+        clientIp as string,
+        undefined
+      );
+    } catch (webhookErr: any) {
+      console.error(`❌ Webhook Payment Process Error for ref ${trxData?.reference}:`, webhookErr.message);
+    }
   }
 });
 

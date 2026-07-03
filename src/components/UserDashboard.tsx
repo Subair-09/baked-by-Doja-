@@ -493,7 +493,8 @@ export default function UserDashboard({
         setPaymentStepText("Verifying your Paystack payment transaction...");
         
         try {
-          const verifyRes = await fetch(`/api/payments/verify/${reference}?orderId=${orderId}`);
+          const phoneParam = checkoutPhone || (currentUser ? currentUser.phone : '');
+          const verifyRes = await fetch(`/api/payments/verify/${reference}?orderId=${orderId}&phone=${encodeURIComponent(phoneParam)}`);
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
             // Complete the order flow & trigger success UI
