@@ -890,7 +890,7 @@ app.get("/api/settings/public", async (req, res) => {
 
 // 5g. Verify Paystack Payment
 app.post("/api/payments/initialize", async (req, res) => {
-  const { email, amount, orderId, callbackUrl } = req.body;
+  const { email, amount, orderId, callbackUrl, metadata } = req.body;
 
   if (!email || !amount || !orderId) {
     return res.status(400).json({ success: false, message: "Missing required initialize fields" });
@@ -928,7 +928,8 @@ app.post("/api/payments/initialize", async (req, res) => {
         email,
         amount: Math.round(amount),
         reference: orderId,
-        callback_url: callbackUrl
+        callback_url: callbackUrl,
+        metadata: metadata || {}
       })
     });
 
@@ -989,13 +990,87 @@ app.get("/api/payments/verify/:reference", async (req, res) => {
 
     const data: any = await paystackRes.json();
     if (data.status && data.data && data.data.status === 'success') {
-      if (orderId) {
-        await updateOrderPayment(orderId as string, 'paid', reference);
+      let orderData = null;
+      if (data.data.metadata && data.data.metadata.orderData) {
+        orderData = data.data.metadata.orderData;
+      } else if (data.data.metadata) {
+        try {
+          const parsedMeta = typeof data.data.metadata === 'string' ? JSON.parse(data.data.metadata) : data.data.metadata;
+          orderData = parsedMeta.orderData;
+        } catch (e) {
+          console.error("Error parsing metadata:", e);
+        }
       }
+
+      if (dbPool && tablesInitialized && orderId) {
+        try {
+          // Check if order already exists in database
+          const existingOrder = await dbPool.query("SELECT order_id FROM doja_orders WHERE order_id = $1", [orderId]);
+          if (existingOrder.rows.length === 0 && orderData) {
+            // It does not exist yet! Let's insert it now as a PAID order!
+            await dbPool.query(
+              `INSERT INTO doja_orders 
+              (order_id, customer_name, customer_phone, product_title, quantity, topping, delivery_type, is_gift, gift_note, delivery_note, total_amount, status, payment_status, payment_reference) 
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', 'paid', $12)`,
+              [
+                orderData.orderId || orderId,
+                orderData.customerName,
+                orderData.customerPhone,
+                orderData.productTitle,
+                orderData.quantity,
+                orderData.topping,
+                orderData.deliveryType,
+                orderData.isGift || false,
+                orderData.giftNote ? JSON.stringify(orderData.giftNote) : null,
+                orderData.deliveryNote || null,
+                orderData.totalAmount,
+                reference
+              ]
+            );
+            console.log(`Inserted paid order ${orderId} upon successful Paystack verification.`);
+          } else {
+            // If it already exists, just update payment status to 'paid' and reference
+            await dbPool.query(
+              "UPDATE doja_orders SET payment_status = 'paid', payment_reference = $1 WHERE order_id = $2",
+              [reference, orderId]
+            );
+            console.log(`Updated existing order ${orderId} to paid upon successful Paystack verification.`);
+          }
+        } catch (dbErr) {
+          console.error("Error saving verified order to DB:", dbErr);
+        }
+      } else if (orderId) {
+        // Update in-memory fallback list
+        const order = fallbackOrders.find(o => o.orderId === orderId);
+        if (order) {
+          order.paymentStatus = 'paid';
+          order.paymentReference = reference;
+        } else if (orderData) {
+          fallbackOrders.push({
+            orderId: orderData.orderId || orderId,
+            customerName: orderData.customerName,
+            customerPhone: orderData.customerPhone,
+            productTitle: orderData.productTitle,
+            quantity: orderData.quantity,
+            topping: orderData.topping,
+            deliveryType: orderData.deliveryType,
+            isGift: orderData.isGift || false,
+            giftNote: orderData.giftNote || null,
+            deliveryNote: orderData.deliveryNote || null,
+            totalAmount: orderData.totalAmount,
+            status: 'pending',
+            date: new Date().toISOString(),
+            paymentStatus: 'paid',
+            paymentReference: reference
+          });
+        }
+      }
+
       return res.json({
         success: true,
         status: "success",
-        data: data.data
+        data: data.data,
+        orderData: orderData
       });
     } else {
       return res.json({

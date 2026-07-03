@@ -497,7 +497,7 @@ export default function UserDashboard({
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
             // Complete the order flow & trigger success UI
-            await completeOrderFlow(orderId, null);
+            await completeOrderFlow(orderId, verifyData.orderData);
           } else {
             triggerToast("Payment verification unsuccessful: " + verifyData.message, "error");
             setIsPaying(false);
@@ -1240,26 +1240,7 @@ export default function UserDashboard({
       return;
     }
 
-    // 2. Pre-create order as unpaid pending in database
-    try {
-      setPaymentStepText("Reserving your fresh baking oven...");
-      const orderRes = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderData),
-      });
-      if (!orderRes.ok) {
-        throw new Error('Failed to record pending order');
-      }
-    } catch (err) {
-      console.warn("Database saving offline/skipped, inserting to local backup.");
-      const existing = localStorage.getItem('baked_by_doja_orders');
-      const localOrders = existing ? JSON.parse(existing) : [];
-      localOrders.push({ ...orderData, status: 'pending', paymentStatus: 'unpaid', date: new Date().toISOString() });
-      localStorage.setItem('baked_by_doja_orders', JSON.stringify(localOrders));
-    }
-
-    // 3. Launch Paystack Redirect Checkout
+    // 2. Launch Paystack Redirect Checkout
     setPaymentStepText("Generating secure checkout portal...");
     const userEmail = `${currentUser ? currentUser.phone : 'guest'}@bakedbydoja.com`;
     
@@ -1271,7 +1252,8 @@ export default function UserDashboard({
           email: userEmail,
           amount: getCartGrandTotal() * 100, // NGN in kobo
           orderId,
-          callbackUrl: window.location.origin + window.location.pathname + `?order_id=${orderId}`
+          callbackUrl: window.location.origin + window.location.pathname + `?order_id=${orderId}`,
+          metadata: { orderData }
         })
       });
 
@@ -1304,16 +1286,22 @@ export default function UserDashboard({
       return { ...prev, [userPhoneForXP]: current + (totalQty * 100) };
     });
 
-    // Update local storage backup with 'paid' if exists
+    // Update local storage backup with 'paid' if exists, or append it if new
     try {
       const existing = localStorage.getItem('baked_by_doja_orders');
-      if (existing) {
-        const localOrders = JSON.parse(existing);
-        const idx = localOrders.findIndex((o: any) => o.orderId === orderId);
-        if (idx !== -1) {
-          localOrders[idx].paymentStatus = 'paid';
-          localStorage.setItem('baked_by_doja_orders', JSON.stringify(localOrders));
-        }
+      const localOrders = existing ? JSON.parse(existing) : [];
+      const idx = localOrders.findIndex((o: any) => o.orderId === orderId);
+      if (idx !== -1) {
+        localOrders[idx].paymentStatus = 'paid';
+        localStorage.setItem('baked_by_doja_orders', JSON.stringify(localOrders));
+      } else if (orderData) {
+        localOrders.push({
+          ...orderData,
+          status: 'pending',
+          paymentStatus: 'paid',
+          date: new Date().toISOString()
+        });
+        localStorage.setItem('baked_by_doja_orders', JSON.stringify(localOrders));
       }
     } catch {}
 
