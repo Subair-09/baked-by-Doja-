@@ -74,9 +74,13 @@ export default function App() {
     window.dispatchEvent(new Event('storage'));
     
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
       await fetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ products: updated })
       });
     } catch (e) {
@@ -90,9 +94,13 @@ export default function App() {
     window.dispatchEvent(new Event('storage'));
     
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
       await fetch('/api/gallery', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ gallery: updated })
       });
     } catch (e) {
@@ -180,7 +188,7 @@ export default function App() {
       return 'landing';
     }
   });
-  const [currentUser, setCurrentUser] = useState<{ name: string; phone: string; role?: string } | null>(() => {
+  const [currentUser, setCurrentUser] = useState<{ name: string; phone: string; role?: string; token?: string } | null>(() => {
     try {
       const saved = localStorage.getItem('baked_by_doja_current_user');
       return saved ? JSON.parse(saved) : null;
@@ -220,7 +228,7 @@ export default function App() {
     }
   }, [currentPage]);
 
-  const handleAuthSuccess = (user: { name: string; phone: string; role?: string }) => {
+  const handleAuthSuccess = (user: { name: string; phone: string; role?: string; token?: string }) => {
     setCurrentUser(user);
     if (user.role === 'admin') {
       setCurrentPage('dashboard');

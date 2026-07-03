@@ -86,13 +86,15 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       }
 
       setSuccessMsg(isLogin ? `Welcome back, ${data.user.name}!` : `Account created! Welcoming you to the fresh sunrise bakery...`);
-      localStorage.setItem('baked_by_doja_current_user', JSON.stringify({
+      const userPayload = {
         name: data.user.name,
         phone: data.user.phone,
         role: data.user.role || (data.user.phone === 'admin' ? 'admin' : undefined),
-      }));
+        token: data.token
+      };
+      localStorage.setItem('baked_by_doja_current_user', JSON.stringify(userPayload));
       setTimeout(() => {
-        onSuccess({ name: data.user.name, phone: data.user.phone, role: data.user.role || (data.user.phone === 'admin' ? 'admin' : undefined) });
+        onSuccess(userPayload);
       }, 1000);
 
     } catch (err: any) {

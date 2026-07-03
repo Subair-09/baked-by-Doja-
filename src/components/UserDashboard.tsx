@@ -13,9 +13,9 @@ import { Product, GalleryItem } from '../types';
 interface UserDashboardProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: { name: string; phone: string; role?: string } | null;
+  currentUser: { name: string; phone: string; role?: string; token?: string } | null;
   onOrderNowClick: (productTitle?: string) => void;
-  onAuthSuccess?: (user: { name: string; phone: string; role?: string }) => void;
+  onAuthSuccess?: (user: { name: string; phone: string; role?: string; token?: string }) => void;
   editProductOnLoad?: Product | null;
   onResetEditProductOnLoad?: () => void;
   products?: Product[];
@@ -230,7 +230,11 @@ export default function UserDashboard({
   const fetchSettings = async () => {
     setIsLoadingSettings(true);
     try {
-      const res = await fetch('/api/settings');
+      const headers: Record<string, string> = {};
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
+      const res = await fetch('/api/settings', { headers });
       const data = await res.json();
       if (data.success) {
         setPaystackPublicKey(data.paystack_public_key || '');
@@ -248,11 +252,15 @@ export default function UserDashboard({
     setIsSavingSettings(true);
     setSettingsMessage(null);
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           paystack_public_key: paystackPublicKey,
           paystack_secret_key: paystackSecretKey,
@@ -380,7 +388,11 @@ export default function UserDashboard({
     if (!currentUser) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/orders?phone=${encodeURIComponent(currentUser.phone)}`);
+      const headers: Record<string, string> = {};
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
+      const res = await fetch(`/api/orders?phone=${encodeURIComponent(currentUser.phone)}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.orders) {
@@ -653,7 +665,11 @@ export default function UserDashboard({
     if (!currentUser || currentUser.role !== 'admin') return;
     setIsLoadingUsers(true);
     try {
-      const res = await fetch('/api/users');
+      const headers: Record<string, string> = {};
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
+      const res = await fetch('/api/users', { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.users) {
@@ -893,7 +909,14 @@ export default function UserDashboard({
       async () => {
         setIsDeletingOrderId(orderId);
         try {
-          const res = await fetch(`/api/orders/${orderId}`, { method: 'DELETE' });
+          const headers: Record<string, string> = {};
+          if (currentUser?.token) {
+            headers['Authorization'] = `Bearer ${currentUser.token}`;
+          }
+          const res = await fetch(`/api/orders/${orderId}`, {
+            method: 'DELETE',
+            headers
+          });
           if (res.ok) {
             setOrders(prev => prev.filter(o => o.orderId !== orderId));
             triggerToast(`Order ${orderId} deleted successfully.`, 'success');
@@ -921,9 +944,15 @@ export default function UserDashboard({
   const handleUpdateStatusId = async (orderId: string, nextStatus: string) => {
     setIsUpdatingStatusId(orderId);
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ status: nextStatus })
       });
       if (res.ok) {

@@ -26,10 +26,42 @@ app.use(express.json({
   }
 }));
 
-// Security & HTTPS Enforcement Middleware
+// Security, CORS & HTTPS Enforcement Middleware
 app.use((req, res, next) => {
+  const allowedOrigins = [
+    "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net"
+  ];
+  const origin = req.headers.origin;
+
+  let isAllowed = false;
+  if (origin) {
+    if (allowedOrigins.includes(origin) || 
+        origin.endsWith(".run.app") || 
+        origin.startsWith("http://localhost:") || 
+        origin.startsWith("https://localhost:") ||
+        /https?:\/\/127\.0\.0\.1(:\d+)?/.test(origin)) {
+      isAllowed = true;
+    }
+  }
+
+  if (isAllowed && origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  } else if (!origin) {
+    // If there is no origin header (e.g. direct API calls/webhook), set a fallback
+    res.setHeader("Access-Control-Allow-Origin", "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, x-paystack-signature");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN"); // Allow preview iframe but protect from general framing
   res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("Content-Security-Policy", "upgrade-insecure-requests;");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -42,6 +74,62 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Custom session token logic (crypto-signed session tokens)
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+function generateToken(payload: { phone: string; role?: string }) {
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  const data = JSON.stringify({ ...payload, expiresAt });
+  const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('hex');
+  return Buffer.from(JSON.stringify({ data, signature: hmac })).toString('base64');
+}
+
+function verifyToken(token: string): { phone: string; role?: string } | null {
+  try {
+    const raw = Buffer.from(token, 'base64').toString('utf-8');
+    const { data, signature } = JSON.parse(raw);
+    const expectedHmac = crypto.createHmac('sha256', SESSION_SECRET).update(data).digest('hex');
+    if (expectedHmac !== signature) return null;
+    
+    const payload = JSON.parse(data);
+    if (Date.now() > payload.expiresAt) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// Authentication middleware to extract and verify token from request
+const authenticateToken = (req: any, res: any, next: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  const payload = verifyToken(token);
+  req.user = payload; // Contains { phone, role } or null
+  next();
+};
+
+app.use(authenticateToken);
+
+const requireAuth = (req: any, res: any, next: any) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: "Unauthorized access: Please login first." });
+  }
+  next();
+};
+
+const requireAdmin = (req: any, res: any, next: any) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: "Forbidden: Admin privileges required." });
+  }
+  next();
+};
 
 // In-Memory Fallback Store (to prevent crashing and maintain functionality when Azure PG is not configured)
 const fallbackUsers: any[] = [];
@@ -419,7 +507,9 @@ app.post("/api/auth/register", async (req, res) => {
         "INSERT INTO doja_users (name, phone, password) VALUES ($1, $2, $3) RETURNING name, phone",
         [name, phone, hashedPassword]
       );
-      return res.json({ success: true, user: insertRes.rows[0] });
+      const user = insertRes.rows[0];
+      const token = generateToken({ phone: user.phone });
+      return res.json({ success: true, user, token });
     } else {
       // In-Memory Fallback with hashed password
       const exists = fallbackUsers.some((u) => u.phone === phone);
@@ -428,7 +518,8 @@ app.post("/api/auth/register", async (req, res) => {
       }
       const newUser = { name, phone, password: hashedPassword };
       fallbackUsers.push(newUser);
-      return res.json({ success: true, user: { name, phone } });
+      const token = generateToken({ phone });
+      return res.json({ success: true, user: { name, phone }, token });
     }
   } catch (err: any) {
     console.error("Registration error:", err);
@@ -446,13 +537,16 @@ app.post("/api/auth/login", async (req, res) => {
   // Admin intercept
   if (phone === "adeyemifaridah23@gmail.com") {
     if (password === "Anike2003") {
+      const user = {
+        name: "Admin Faridah",
+        phone: "admin",
+        role: "admin"
+      };
+      const token = generateToken({ phone: "admin", role: "admin" });
       return res.json({
         success: true,
-        user: {
-          name: "Admin Faridah",
-          phone: "admin",
-          role: "admin"
-        }
+        user,
+        token
       });
     } else {
       return res.status(400).json({ error: "Incorrect password for admin" });
@@ -474,7 +568,8 @@ app.post("/api/auth/login", async (req, res) => {
       if (!isMatch) {
         return res.status(400).json({ error: "Incorrect phone number or password" });
       }
-      return res.json({ success: true, user: { name: user.name, phone: user.phone } });
+      const token = generateToken({ phone: user.phone });
+      return res.json({ success: true, user: { name: user.name, phone: user.phone }, token });
     } else {
       // In-Memory Fallback
       const user = fallbackUsers.find((u) => u.phone === phone);
@@ -485,7 +580,8 @@ app.post("/api/auth/login", async (req, res) => {
       if (!isMatch) {
         return res.status(400).json({ error: "Incorrect phone number or password" });
       }
-      return res.json({ success: true, user: { name: user.name, phone: user.phone } });
+      const token = generateToken({ phone: user.phone });
+      return res.json({ success: true, user: { name: user.name, phone: user.phone }, token });
     }
   } catch (err: any) {
     console.error("Login error:", err);
@@ -520,7 +616,7 @@ app.get("/api/products", async (req, res) => {
 });
 
 // 3.4b. Save / Update all products
-app.post("/api/products", async (req, res) => {
+app.post("/api/products", requireAdmin, async (req, res) => {
   const { products: newProducts } = req.body;
   if (!Array.isArray(newProducts)) {
     return res.status(400).json({ error: "Products array is required" });
@@ -584,7 +680,7 @@ app.get("/api/gallery", async (req, res) => {
 });
 
 // Save / Update all gallery items
-app.post("/api/gallery", async (req, res) => {
+app.post("/api/gallery", requireAdmin, async (req, res) => {
   const { gallery: newGallery } = req.body;
   if (!Array.isArray(newGallery)) {
     return res.status(400).json({ error: "Gallery array is required" });
@@ -629,7 +725,7 @@ app.post("/api/gallery", async (req, res) => {
 });
 
 // 3.5. Get All Users (Admin Only)
-app.get("/api/users", async (req, res) => {
+app.get("/api/users", requireAdmin, async (req, res) => {
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
     try {
@@ -725,10 +821,15 @@ app.post("/api/orders", async (req, res) => {
 });
 
 // 5. Get User Orders
-app.get("/api/orders", async (req, res) => {
+app.get("/api/orders", requireAuth, async (req: any, res: any) => {
   const { phone } = req.query;
   if (!phone) {
     return res.status(400).json({ error: "Missing user phone query parameter" });
+  }
+
+  // BOLA / Authorization Check
+  if (req.user.role !== 'admin' && req.user.phone !== phone) {
+    return res.status(403).json({ success: false, error: "Forbidden: You are not authorized to view orders for this user." });
   }
 
   const dbPool = await getDbPool();
@@ -765,7 +866,7 @@ app.get("/api/orders", async (req, res) => {
 });
 
 // 5b. Update Order Status (for live tracker simulation)
-app.put("/api/orders/:orderId/status", async (req, res) => {
+app.put("/api/orders/:orderId/status", requireAdmin, async (req, res) => {
   const { orderId } = req.params;
   const { status } = req.body;
   if (!status) {
@@ -796,7 +897,7 @@ app.put("/api/orders/:orderId/status", async (req, res) => {
 });
 
 // 5c. Delete Order (Admin Only)
-app.delete("/api/orders/:orderId", async (req, res) => {
+app.delete("/api/orders/:orderId", requireAdmin, async (req, res) => {
   const { orderId } = req.params;
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
@@ -836,7 +937,7 @@ async function updateOrderPayment(orderId: string, paymentStatus: string, refere
 }
 
 // 5d. Save Paystack Settings (Admin Only)
-app.post("/api/settings", async (req, res) => {
+app.post("/api/settings", requireAdmin, async (req, res) => {
   const { paystack_public_key, paystack_secret_key } = req.body;
 
   const dbPool = await getDbPool();
@@ -866,7 +967,7 @@ app.post("/api/settings", async (req, res) => {
 });
 
 // 5e. Get Paystack Settings (Admin Only)
-app.get("/api/settings", async (req, res) => {
+app.get("/api/settings", requireAdmin, async (req, res) => {
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
     try {
