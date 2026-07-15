@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
 import { products, gallery } from '../data';
 import { Product, GalleryItem } from '../types';
+import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase } from '../utils/pixel';
 
 interface UserDashboardProps {
   isOpen: boolean;
@@ -171,6 +172,8 @@ export default function UserDashboard({
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'card' | 'transfer'>('paystack');
   const [activePaystackPublicKey, setActivePaystackPublicKey] = useState('');
+  const [activeFacebookPixelId, setActiveFacebookPixelId] = useState('');
+  const [activeFacebookConversionId, setActiveFacebookConversionId] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -223,6 +226,8 @@ export default function UserDashboard({
   const [weeklyViewMode, setWeeklyViewMode] = useState<'current_week' | 'all_time'>('current_week');
   const [paystackPublicKey, setPaystackPublicKey] = useState('');
   const [paystackSecretKey, setPaystackSecretKey] = useState('');
+  const [facebookPixelId, setFacebookPixelId] = useState('');
+  const [facebookConversionId, setFacebookConversionIdState] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -239,6 +244,8 @@ export default function UserDashboard({
       if (data.success) {
         setPaystackPublicKey(data.paystack_public_key || '');
         setPaystackSecretKey(data.paystack_secret_key || '');
+        setFacebookPixelId(data.facebook_pixel_id || '');
+        setFacebookConversionIdState(data.facebook_conversion_id || '');
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
@@ -264,12 +271,22 @@ export default function UserDashboard({
         body: JSON.stringify({
           paystack_public_key: paystackPublicKey,
           paystack_secret_key: paystackSecretKey,
+          facebook_pixel_id: facebookPixelId,
+          facebook_conversion_id: facebookConversionId,
         }),
       });
       const data = await res.json();
       if (data.success) {
-        setSettingsMessage({ type: 'success', text: 'Paystack dynamic API keys saved successfully!' });
+        setSettingsMessage({ type: 'success', text: 'Dynamic API keys and tracking settings saved successfully!' });
         setActivePaystackPublicKey(paystackPublicKey);
+        setActiveFacebookPixelId(facebookPixelId);
+        setActiveFacebookConversionId(facebookConversionId);
+        if (facebookPixelId) {
+          initFacebookPixel(facebookPixelId);
+        }
+        if (facebookConversionId) {
+          setFacebookConversionId(facebookConversionId);
+        }
       } else {
         setSettingsMessage({ type: 'error', text: 'Failed to save settings: ' + data.error });
       }
@@ -434,6 +451,14 @@ export default function UserDashboard({
       const data = await res.json();
       if (data.success) {
         setActivePaystackPublicKey(data.paystack_public_key || '');
+        if (data.facebook_pixel_id) {
+          setActiveFacebookPixelId(data.facebook_pixel_id);
+          initFacebookPixel(data.facebook_pixel_id);
+        }
+        if (data.facebook_conversion_id) {
+          setActiveFacebookConversionId(data.facebook_conversion_id);
+          setFacebookConversionId(data.facebook_conversion_id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch public settings:', err);
@@ -1129,6 +1154,7 @@ export default function UserDashboard({
       };
       setCartItems([...cartItems, newItem]);
     }
+    trackAddToCart(product.id, product.title, product.price * quantity);
     triggerToast(`Added ${quantity}x ${product.title} to cart!`, "success");
   };
 
@@ -1231,6 +1257,7 @@ export default function UserDashboard({
 
     setIsPaying(true);
     setPaymentStepText("Initializing checkout session...");
+    trackInitiateCheckout(cartItems, getCartGrandTotal());
 
     // Generate unique order ID
     const orderId = `DOJA-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -1303,6 +1330,13 @@ export default function UserDashboard({
   };
 
   const completeOrderFlow = async (orderId: string, orderData: any) => {
+    // Track Meta Pixel Purchase event
+    try {
+      trackPurchase(orderId, orderData?.totalAmount || getCartGrandTotal(), cartItems, "NGN", activeFacebookConversionId);
+    } catch (pixelErr) {
+      console.warn("Failed to fire Pixel purchase event:", pixelErr);
+    }
+
     // Sync UI & state
     await fetchOrders();
     setSelectedOrderId(orderId);
@@ -3773,6 +3807,38 @@ export default function UserDashboard({
                             />
                             <span className="block text-[9px] text-chocolate/40 leading-normal">
                               Keep this key secret. It is stored securely on the backend and used for cryptographic payment verification.
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
+                              Meta (Facebook) Pixel ID
+                            </label>
+                            <input
+                              type="text"
+                              value={facebookPixelId}
+                              onChange={e => setFacebookPixelId(e.target.value)}
+                              placeholder="e.g. 123456789012345"
+                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal">
+                              Enter your 15-digit Meta Pixel ID to track customer purchase funnels and optimize ad campaigns.
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
+                              Meta (Facebook) Purchase Conversion ID / Event ID
+                            </label>
+                            <input
+                              type="text"
+                              value={facebookConversionId}
+                              onChange={e => setFacebookConversionIdState(e.target.value)}
+                              placeholder="e.g. purchase_conversion_2026"
+                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal">
+                              Optional. Enter a custom Purchase Event/Conversion ID to optimize tracking or link with Conversions API deduplication.
                             </span>
                           </div>
 

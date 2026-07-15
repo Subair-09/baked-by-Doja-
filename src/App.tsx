@@ -15,6 +15,7 @@ import UserDashboard from './components/UserDashboard';
 import FloatingWhatsApp from './components/FloatingWhatsApp';
 import { Product, GalleryItem } from './types';
 import { products as defaultProducts, gallery as defaultGallery } from './data';
+import { initFacebookPixel, setFacebookConversionId } from './utils/pixel';
 
 export default function App() {
   const [activeProducts, setActiveProducts] = useState<Product[]>(() => {
@@ -64,8 +65,27 @@ export default function App() {
         console.error("Error loading gallery from server:", err);
       }
     };
+    const loadPublicKeysAndPixel = async () => {
+      try {
+        const res = await fetch('/api/settings/public');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            if (data.facebook_pixel_id) {
+              initFacebookPixel(data.facebook_pixel_id);
+            }
+            if (data.facebook_conversion_id) {
+              setFacebookConversionId(data.facebook_conversion_id);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load public keys / pixel settings:", err);
+      }
+    };
     loadProductsFromServer();
     loadGalleryFromServer();
+    loadPublicKeysAndPixel();
   }, []);
 
   const saveProducts = async (updated: Product[]) => {

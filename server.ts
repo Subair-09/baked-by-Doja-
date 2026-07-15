@@ -35,7 +35,8 @@ app.use(
           "'unsafe-eval'",
           "https://js.paystack.co",
           "https://checkout.paystack.com",
-          "https://*.paystack.co"
+          "https://*.paystack.co",
+          "https://connect.facebook.net"
         ],
         styleSrc: [
           "'self'",
@@ -58,6 +59,7 @@ app.use(
           "https://paystack.com",
           "https://*.paystack.com",
           "https://*.paystack.co",
+          "https://www.facebook.com",
           "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net"
         ],
         connectSrc: [
@@ -67,6 +69,7 @@ app.use(
           "https://api.paystack.co",
           "https://checkout.paystack.com",
           "https://*.paystack.co",
+          "https://connect.facebook.net",
           "https://bakedbydoja-hbf4ceeugafjhng2.canadacentral-01.azurewebsites.net",
           "https://*.run.app",
           "http://localhost:*",
@@ -346,12 +349,23 @@ let fallbackGallery: any[] = [...defaultGallery];
 
 let pool: pg.Pool | null = null;
 let tablesInitialized = false;
+let dbDisabledUntil = 0;
+const DB_COOLDOWN_TIME = 60000; // 1 minute cooldown
 
 // Lazy DB initialization to prevent crash if variables are not yet provided
 async function getDbPool(): Promise<pg.Pool | null> {
+  const now = Date.now();
+  if (now < dbDisabledUntil) {
+    return null;
+  }
+
   if (pool) {
     if (!tablesInitialized) {
       await initializeTables(pool);
+      if (!tablesInitialized) {
+        dbDisabledUntil = Date.now() + DB_COOLDOWN_TIME;
+        return null;
+      }
     }
     return pool;
   }
@@ -398,9 +412,17 @@ async function getDbPool(): Promise<pg.Pool | null> {
       console.error("❌ Unexpected error on idle client in pg Pool:", err);
     });
     await initializeTables(pool);
+    if (!tablesInitialized) {
+      dbDisabledUntil = Date.now() + DB_COOLDOWN_TIME;
+      try {
+        await pool.end();
+      } catch (e) {}
+      pool = null;
+      return null;
+    }
     return pool;
-  } catch (error) {
-    console.error("❌ Failed to initialize Azure PostgreSQL pool:", error);
+  } catch (error: any) {
+    console.warn(`⚠️ Failed to initialize Azure PostgreSQL pool: ${error?.message || error}. Running in local memory fallback mode.`);
     pool = null;
     return null;
   }
@@ -531,8 +553,8 @@ async function initializeTables(dbPool: pg.Pool) {
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.error("❌ Failed to initialize tables in Azure PostgreSQL database:", err);
+  } catch (err: any) {
+    console.warn(`⚠️ Azure PostgreSQL offline or unreachable: ${err?.message || err}. Running in local memory fallback mode.`);
   }
 }
 
@@ -1024,7 +1046,7 @@ async function updateOrderPayment(orderId: string, paymentStatus: string, refere
 
 // 5d. Save Paystack Settings (Admin Only)
 app.post("/api/settings", requireAdmin, async (req, res) => {
-  const { paystack_public_key, paystack_secret_key } = req.body;
+  const { paystack_public_key, paystack_secret_key, facebook_pixel_id, facebook_conversion_id } = req.body;
 
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
@@ -1039,6 +1061,16 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
          ON CONFLICT (key) DO UPDATE SET value = $1`,
         [paystack_secret_key || '']
       );
+      await dbPool.query(
+        `INSERT INTO doja_settings (key, value) VALUES ('facebook_pixel_id', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [facebook_pixel_id || '']
+      );
+      await dbPool.query(
+        `INSERT INTO doja_settings (key, value) VALUES ('facebook_conversion_id', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [facebook_conversion_id || '']
+      );
       return res.json({ success: true, message: "Settings saved successfully." });
     } catch (err: any) {
       console.error("Database settings insert error:", err);
@@ -1048,6 +1080,8 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
     // Memory fallback
     fallbackSettings['paystack_public_key'] = paystack_public_key || '';
     fallbackSettings['paystack_secret_key'] = paystack_secret_key || '';
+    fallbackSettings['facebook_pixel_id'] = facebook_pixel_id || '';
+    fallbackSettings['facebook_conversion_id'] = facebook_conversion_id || '';
     return res.json({ success: true, message: "Settings saved to in-memory fallback store." });
   }
 });
@@ -1065,7 +1099,9 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
       return res.json({
         success: true,
         paystack_public_key: settingsMap['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
-        paystack_secret_key: settingsMap['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || ''
+        paystack_secret_key: settingsMap['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || '',
+        facebook_pixel_id: settingsMap['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
+        facebook_conversion_id: settingsMap['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || ''
       });
     } catch (err: any) {
       console.error("Database settings query error:", err);
@@ -1075,7 +1111,9 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
     return res.json({
       success: true,
       paystack_public_key: fallbackSettings['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
-      paystack_secret_key: fallbackSettings['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || ''
+      paystack_secret_key: fallbackSettings['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || '',
+      facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
+      facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || ''
     });
   }
 });
@@ -1085,15 +1123,28 @@ app.get("/api/settings/public", async (req, res) => {
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
     try {
-      const result = await dbPool.query("SELECT value FROM doja_settings WHERE key = 'paystack_public_key'");
-      const val = result.rows[0]?.value || process.env.PAYSTACK_PUBLIC_KEY || '';
-      return res.json({ success: true, paystack_public_key: val });
+      const result = await dbPool.query("SELECT key, value FROM doja_settings WHERE key IN ('paystack_public_key', 'facebook_pixel_id', 'facebook_conversion_id')");
+      const settingsMap: Record<string, string> = {};
+      result.rows.forEach(row => {
+        settingsMap[row.key] = row.value;
+      });
+      return res.json({
+        success: true,
+        paystack_public_key: settingsMap['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
+        facebook_pixel_id: settingsMap['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
+        facebook_conversion_id: settingsMap['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || ''
+      });
     } catch (err: any) {
       console.error("Database settings query error:", err);
-      return res.status(500).json({ error: "Failed to fetch public key." });
+      return res.status(500).json({ error: "Failed to fetch public keys." });
     }
   } else {
-    return res.json({ success: true, paystack_public_key: fallbackSettings['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '' });
+    return res.json({
+      success: true,
+      paystack_public_key: fallbackSettings['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
+      facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
+      facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || ''
+    });
   }
 });
 
