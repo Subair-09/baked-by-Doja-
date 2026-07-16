@@ -83,29 +83,21 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
               </span>
             </a>
 
-            {/* Database Status Indicator Pill */}
-            <div className="flex items-center">
+            {/* Database Status Indicator Dot */}
+            <div className="flex items-center ml-2">
               {dbStatus.connected ? (
                 <div 
-                  className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-sm"
-                  title={dbStatus.details || "Connected to Azure Database for PostgreSQL Flexible Server"}
+                  className="relative flex h-2.5 w-2.5 cursor-help"
+                  title={dbStatus.details || "Connected to Database Server"}
                 >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <Database className="w-3 h-3 text-emerald-600 shrink-0" />
-                  <span>Azure PG Connected</span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </div>
               ) : (
                 <div 
-                  className="flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5 text-[10px] font-bold shadow-sm cursor-help"
-                  title={dbStatus.message || "Azure PG credentials not configured. App running in Sandbox mode with local memory."}
-                >
-                  <span className="h-2 w-2 rounded-full bg-amber-400"></span>
-                  <Database className="w-3 h-3 text-amber-600 shrink-0" />
-                  <span>Sandbox Mode (Azure PG Pending)</span>
-                </div>
+                  className="h-2.5 w-2.5 rounded-full bg-amber-400 cursor-help"
+                  title={dbStatus.message || "Database credentials not configured. App running in Sandbox mode with local memory."}
+                />
               )}
             </div>
           </div>

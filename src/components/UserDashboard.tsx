@@ -1637,7 +1637,7 @@ export default function UserDashboard({
             <p>Baked by Doja Custom Studio</p>
             <p className="flex items-center justify-center gap-1 font-bold">
               <Database className="w-2.5 h-2.5 text-emerald-500" />
-              <span>{dbStatus.connected ? 'Azure Live Connect' : 'Local Sandboxed Storage'}</span>
+              <span>{dbStatus.connected ? 'Live Connect' : 'Local Sandboxed Storage'}</span>
             </p>
           </div>
         </div>
@@ -1703,7 +1703,7 @@ export default function UserDashboard({
                       </div>
                       <div className="space-y-1">
                         <h4 className="text-lg font-serif font-black text-chocolate">You are Authenticated!</h4>
-                        <p className="text-xs text-chocolate/60">Welcome back, {currentUser.name}. Your active phone is securely logged into our Azure PostgreSQL nodes.</p>
+                        <p className="text-xs text-chocolate/60">Welcome back, {currentUser.name}. Your active phone is securely logged into our secure database nodes.</p>
                       </div>
 
                       <div className="bg-beige/15 rounded-2xl p-4 border border-chocolate/5 grid grid-cols-2 gap-4 text-left">

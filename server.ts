@@ -570,8 +570,8 @@ app.get("/api/db/status", async (req, res) => {
         await client.query("SELECT 1");
         return res.json({ 
           connected: true, 
-          source: "Azure Database for PostgreSQL", 
-          details: `Connected to Host: ${process.env.AZURE_PG_HOST || "configured connection string"}`
+          source: "PostgreSQL Database Server", 
+          details: `Connected to Database Host: ${process.env.AZURE_PG_HOST || "configured database string"}`
         });
       } finally {
         client.release();
@@ -580,7 +580,7 @@ app.get("/api/db/status", async (req, res) => {
   } catch (err: any) {
     return res.json({ 
       connected: false, 
-      source: "Azure Database for PostgreSQL (Configured, but connection failed)", 
+      source: "PostgreSQL Database Server (Configured, but connection failed)", 
       error: err.message 
     });
   }
@@ -588,7 +588,7 @@ app.get("/api/db/status", async (req, res) => {
   return res.json({ 
     connected: false, 
     source: "In-Memory Sandbox", 
-    message: "Azure Database for PostgreSQL credentials not configured. Using local in-memory storage fallback. Add variables in Settings -> Secrets." 
+    message: "Database credentials not configured. Using local in-memory storage fallback. Add variables in Settings -> Secrets." 
   });
 });
 
@@ -1615,20 +1615,20 @@ app.post("/api/upload", upload.single("image"), async (req: express.Request, res
       return res.json({ 
         success: true, 
         url: imageUrl,
-        source: "Azure Blob Storage (Private + Proxied)",
-        message: "Successfully uploaded to private Azure Blob Storage container."
+        source: "Cloud Storage (Private + Proxied)",
+        message: "Successfully uploaded to private cloud storage container."
       });
     } catch (err: any) {
-      console.error("❌ Azure Storage Upload Error:", err);
+      console.error("❌ Cloud Storage Upload Error:", err);
       // Fallback to base64 if upload fails, to prevent broken admin flow
       const base64Data = req.file.buffer.toString("base64");
       const fallbackUrl = `data:${req.file.mimetype};base64,${base64Data}`;
       return res.json({
         success: true,
         url: fallbackUrl,
-        source: "In-Memory Base64 Fallback (Azure failed)",
+        source: "In-Memory Base64 Fallback (Cloud failed)",
         error: err.message,
-        message: `Azure upload failed: ${err.message}. Used fallback data URL instead so your changes aren't lost!`
+        message: `Cloud upload failed: ${err.message}. Used fallback data URL instead so your changes aren't lost!`
       });
     }
   } else {
@@ -1639,7 +1639,7 @@ app.post("/api/upload", upload.single("image"), async (req: express.Request, res
       success: true,
       url: fallbackUrl,
       source: "In-Memory Base64 Fallback",
-      message: "Azure Storage Connection String not configured. Created a local Data URL image fallback. To use real Azure Storage, add AZURE_STORAGE_CONNECTION_STRING to your Secrets."
+      message: "Cloud Storage connection string not configured. Created a local Data URL image fallback. To use real Cloud Storage, add AZURE_STORAGE_CONNECTION_STRING to your Secrets."
     });
   }
 });
@@ -1650,7 +1650,7 @@ app.get("/api/images/:name", async (req: express.Request, res: express.Response)
   const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || "dojastore";
 
   if (!connectionString) {
-    return res.status(404).send("Azure Storage not configured.");
+    return res.status(404).send("Cloud Storage not configured.");
   }
 
   try {
@@ -1671,7 +1671,7 @@ app.get("/api/images/:name", async (req: express.Request, res: express.Response)
       res.status(500).send("Unable to read image stream.");
     }
   } catch (err: any) {
-    console.error("❌ Error serving image from Azure Storage:", err);
+    console.error("❌ Error serving image from cloud storage:", err);
     res.status(404).send("Image not found.");
   }
 });
@@ -1687,7 +1687,7 @@ app.delete("/api/images", async (req: express.Request, res: express.Response): P
   const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || "dojastore";
 
   if (!connectionString) {
-    return res.json({ success: true, message: "Azure Storage is not configured, skipped deleting local/base64 fallback image." });
+    return res.json({ success: true, message: "Cloud Storage is not configured, skipped deleting local/base64 fallback image." });
   }
 
   // Check if it's an Azure Blob hosted image
@@ -1704,17 +1704,17 @@ app.delete("/api/images", async (req: express.Request, res: express.Response): P
         return res.json({ 
           success: true, 
           message: deleteResponse.succeeded 
-            ? `Successfully deleted image '${blobName}' from Azure Blob Storage.` 
+            ? `Successfully deleted image '${blobName}' from Cloud Storage.` 
             : `Image '${blobName}' was already deleted or did not exist.`
         });
       } catch (err: any) {
-        console.error("❌ Azure Storage Delete Error:", err);
-        return res.status(500).json({ success: false, error: "Failed to delete image from Azure Storage.", details: err.message });
+        console.error("❌ Cloud Storage Delete Error:", err);
+        return res.status(500).json({ success: false, error: "Failed to delete image from Cloud Storage.", details: err.message });
       }
     }
   }
 
-  return res.json({ success: true, message: "Image is not stored in Azure Blob Storage, skipped deletion." });
+  return res.json({ success: true, message: "Image is not stored in Cloud Storage, skipped deletion." });
 });
 
 // Setup Vite Dev Server / Static Assets Route
