@@ -91,7 +91,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       console.warn("API Auth info/error, checking fallback:", err);
       
       // Admin check again in case API is down but they entered details
-      if (trimmedPhone === 'adeyemifaridah23@gmail.com' && password === 'Anike2003') {
+      if (trimmedPhone === 'joemalik23@outlook.com' && password === 'Anike2003') {
         setSuccessMsg('Welcome back, Admin Faridah!');
         const adminUser = { name: 'Admin Faridah', phone: 'admin', role: 'admin', token: 'mock-admin-token' };
         localStorage.setItem('baked_by_doja_current_user', JSON.stringify(adminUser));
@@ -256,7 +256,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
                 required
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder={isAdmin ? "adeyemifaridah23@gmail.com" : "e.g. 08012345678"}
+                placeholder={isAdmin ? "e.g. admin@example.com" : "e.g. 08012345678"}
                 className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
               />
             </div>
