@@ -253,8 +253,8 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<'landing' | 'dashboard'>(() => {
     try {
       const isExplicitAdminUrl = 
-        window.location.pathname === '/auth/login' || 
-        window.location.pathname === '/auth/login/' ||
+        window.location.pathname === '/auth/signin' || 
+        window.location.pathname === '/auth/signin/' ||
         window.location.hash === '#admin-login' ||
         window.location.search.includes('admin=true');
       const params = new URLSearchParams(window.location.search);
@@ -279,8 +279,8 @@ export default function App() {
   const [dashboardTab, setDashboardTab] = useState<string>(() => {
     try {
       const isExplicitAdminUrl = 
-        window.location.pathname === '/auth/login' || 
-        window.location.pathname === '/auth/login/' ||
+        window.location.pathname === '/auth/signin' || 
+        window.location.pathname === '/auth/signin/' ||
         window.location.hash === '#admin-login' ||
         window.location.search.includes('admin=true');
       return isExplicitAdminUrl ? 'auth' : 'browse';
@@ -302,8 +302,8 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const isExplicitAdminUrl = 
-        window.location.pathname === '/auth/login' || 
-        window.location.pathname === '/auth/login/' ||
+        window.location.pathname === '/auth/signin' || 
+        window.location.pathname === '/auth/signin/' ||
         window.location.hash === '#admin-login' ||
         window.location.search.includes('admin=true');
       if (isExplicitAdminUrl) {

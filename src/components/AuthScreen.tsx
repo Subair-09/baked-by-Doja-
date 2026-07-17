@@ -9,8 +9,8 @@ interface AuthScreenProps {
 
 export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
   const isExplicitAdminUrl = typeof window !== 'undefined' && (
-    window.location.pathname === '/auth/login' || 
-    window.location.pathname === '/auth/login/' ||
+    window.location.pathname === '/auth/signin' || 
+    window.location.pathname === '/auth/signin/' ||
     window.location.hash === '#admin-login' ||
     window.location.search.includes('admin=true')
   );
