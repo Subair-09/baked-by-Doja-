@@ -15,9 +15,10 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const [dbStatus, setDbStatus] = useState<{ connected: boolean; source: string; message?: string; details?: string }>({
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; storageConnected?: boolean; source: string; message?: string; details?: string }>({
     connected: false,
-    source: 'Checking Database Status...',
+    storageConnected: false,
+    source: 'Checking Connection Status...',
   });
 
   useEffect(() => {
@@ -83,8 +84,9 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
               </span>
             </a>
 
-            {/* Database Status Indicator Dot */}
-            <div className="flex items-center ml-2">
+            {/* Connection Status Indicators */}
+            <div className="flex items-center gap-2 ml-2">
+              {/* Database Status Indicator Dot */}
               {dbStatus.connected ? (
                 <div 
                   className="relative flex h-2.5 w-2.5 cursor-help"
@@ -97,6 +99,22 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
                 <div 
                   className="h-2.5 w-2.5 rounded-full bg-amber-400 cursor-help"
                   title={dbStatus.message || "Database credentials not configured. App running in Sandbox mode with local memory."}
+                />
+              )}
+
+              {/* Storage Status Indicator Dot */}
+              {dbStatus.storageConnected ? (
+                <div 
+                  className="relative flex h-2.5 w-2.5 cursor-help"
+                  title="Connected to Cloud Storage"
+                >
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+                </div>
+              ) : (
+                <div 
+                  className="h-2.5 w-2.5 rounded-full bg-slate-300 cursor-help"
+                  title="Cloud Storage credentials not configured. App running with local image fallback. Add AZURE_STORAGE_CONNECTION_STRING to Secrets."
                 />
               )}
             </div>

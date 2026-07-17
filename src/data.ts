@@ -1,65 +1,6 @@
 import { Product, Testimonial, FAQItem, GalleryItem, Benefit } from './types';
 
-export const products: Product[] = [
-  {
-    id: 'classic',
-    title: 'Classic Banana Bread Loaf',
-    description: 'The golden standard. Soft, perfectly moist, and exploding with rich natural banana sweetness from hand-ripened bananas.',
-    price: 6500, // in NGN
-    originalPrice: 8000,
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=600',
-    tag: 'Best Seller',
-    toppings: ['Classic Plain', 'Light Cinnamon Dust', 'Butter Glaze'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'choco-chip',
-    title: 'Double Chocolate Chip Loaf',
-    description: 'Our classic moist recipe studded with rich semi-sweet Belgian chocolate chips inside and melted on top.',
-    price: 8000,
-    rating: 5.0,
-    image: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=600',
-    tag: 'Highly Rated',
-    toppings: ['Belgian Milk Choc', 'Dark Chocolate Chunks', 'Salted Caramel Drizzle'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'walnut',
-    title: 'Toasted Walnut Banana Bread',
-    description: 'Infused with the nutty crunch of premium roasted California walnuts, roasted in-house and folded gently into the batter.',
-    price: 8500,
-    originalPrice: 9500,
-    rating: 4.8,
-    image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=600',
-    tag: 'Crunchy Favorite',
-    toppings: ['Extra Walnuts', 'Honey Drizzle', 'Sea Salt Flakes'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'premium-caramel',
-    title: 'Premium Caramel Glazed Loaf',
-    description: 'Drizzled with our signature slow-simmered homemade caramel and finished with premium sea salt flakes for an exquisite sweet-savory balance.',
-    price: 9000,
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&q=80&w=600',
-    tag: 'Chef Special',
-    toppings: ['Caramel Glaze', 'Almond Slivers', 'Whipped Butter on side'],
-    prepTime: 'Requires 6h prep notice'
-  },
-  {
-    id: 'gift-bundle',
-    title: 'Baked with Love Gift Box Bundle',
-    description: 'The ultimate luxury gift experience. Features two loaves of your choice, custom gold-foil greeting card, and elegant reusable linen-wrapped box.',
-    price: 18000,
-    originalPrice: 21000,
-    rating: 5.0,
-    image: 'https://images.unsplash.com/photo-1607344645866-009c320c5ab8?auto=format&fit=crop&q=80&w=600',
-    tag: 'Perfect Gift',
-    toppings: ['1 Classic + 1 Choco', '1 Walnut + 1 Caramel', 'Choose Custom Pair'],
-    prepTime: 'Beautifully boxed and wrapped'
-  }
-];
+export const products: Product[] = [];
 
 export const testimonials: Testimonial[] = [
   {

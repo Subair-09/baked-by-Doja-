@@ -89,6 +89,7 @@ export default function App() {
   }, []);
 
   const saveProducts = async (updated: Product[]) => {
+    const previousProducts = [...activeProducts];
     setActiveProducts(updated);
     localStorage.setItem('baked_by_doja_products', JSON.stringify(updated));
     window.dispatchEvent(new Event('storage'));
@@ -98,17 +99,26 @@ export default function App() {
       if (currentUser?.token) {
         headers['Authorization'] = `Bearer ${currentUser.token}`;
       }
-      await fetch('/api/products', {
+      const res = await fetch('/api/products', {
         method: 'POST',
         headers,
         body: JSON.stringify({ products: updated })
       });
-    } catch (e) {
-      console.error('Failed to sync products to database:', e);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server responded with status ${res.status}`);
+      }
+    } catch (e: any) {
+      console.error('Failed to sync products to database, reverting:', e);
+      setActiveProducts(previousProducts);
+      localStorage.setItem('baked_by_doja_products', JSON.stringify(previousProducts));
+      window.dispatchEvent(new Event('storage'));
+      alert(`Failed to save menu changes: ${e.message || e}. Changes have been reverted.`);
     }
   };
 
   const saveGallery = async (updated: GalleryItem[]) => {
+    const previousGallery = [...activeGallery];
     setActiveGallery(updated);
     localStorage.setItem('baked_by_doja_gallery', JSON.stringify(updated));
     window.dispatchEvent(new Event('storage'));
@@ -118,13 +128,21 @@ export default function App() {
       if (currentUser?.token) {
         headers['Authorization'] = `Bearer ${currentUser.token}`;
       }
-      await fetch('/api/gallery', {
+      const res = await fetch('/api/gallery', {
         method: 'POST',
         headers,
         body: JSON.stringify({ gallery: updated })
       });
-    } catch (e) {
-      console.error('Failed to sync gallery to database:', e);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server responded with status ${res.status}`);
+      }
+    } catch (e: any) {
+      console.error('Failed to sync gallery to database, reverting:', e);
+      setActiveGallery(previousGallery);
+      localStorage.setItem('baked_by_doja_gallery', JSON.stringify(previousGallery));
+      window.dispatchEvent(new Event('storage'));
+      alert(`Failed to save gallery changes: ${e.message || e}. Changes have been reverted.`);
     }
   };
 
@@ -165,34 +183,69 @@ export default function App() {
   };
 
   useEffect(() => {
-    const checkProductsAndGallery = () => {
+    const fetchRealtimeDatabaseData = async () => {
+      if (currentUser?.role === 'admin') return;
       try {
-        const stored = localStorage.getItem('baked_by_doja_products');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setActiveProducts(prev => {
-            if (JSON.stringify(parsed) !== JSON.stringify(prev)) {
-              return parsed;
-            }
-            return prev;
-          });
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.products)) {
+            setActiveProducts(prev => {
+              if (JSON.stringify(data.products) !== JSON.stringify(prev)) {
+                localStorage.setItem('baked_by_doja_products', JSON.stringify(data.products));
+                return data.products;
+              }
+              return prev;
+            });
+          }
         }
-      } catch (e) {}
+      } catch (err) {
+        console.warn("Real-time products poll error:", err);
+      }
+
       try {
-        const storedGal = localStorage.getItem('baked_by_doja_gallery');
-        if (storedGal) {
-          const parsedGal = JSON.parse(storedGal);
-          setActiveGallery(prev => {
-            if (JSON.stringify(parsedGal) !== JSON.stringify(prev)) {
-              return parsedGal;
-            }
-            return prev;
-          });
+        const res = await fetch('/api/gallery');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.gallery)) {
+            setActiveGallery(prev => {
+              if (JSON.stringify(data.gallery) !== JSON.stringify(prev)) {
+                localStorage.setItem('baked_by_doja_gallery', JSON.stringify(data.gallery));
+                return data.gallery;
+              }
+              return prev;
+            });
+          }
         }
-      } catch (e) {}
+      } catch (err) {
+        console.warn("Real-time gallery poll error:", err);
+      }
     };
-    const interval = setInterval(checkProductsAndGallery, 2000);
-    return () => clearInterval(interval);
+
+    // Poll database for real-time menu and gallery changes every 5 seconds
+    const interval = setInterval(fetchRealtimeDatabaseData, 5000);
+
+    // Also handle local storage events for multi-tab support
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'baked_by_doja_products' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setActiveProducts(parsed);
+        } catch {}
+      }
+      if (e.key === 'baked_by_doja_gallery' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setActiveGallery(parsed);
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

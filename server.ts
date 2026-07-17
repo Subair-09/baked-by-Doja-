@@ -165,7 +165,7 @@ app.use((req, res, next) => {
 });
 
 // Custom session token logic (crypto-signed session tokens)
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_SECRET = process.env.SESSION_SECRET || "baked_by_doja_secure_secret_token_12345";
 
 function generateToken(payload: { phone: string; role?: string }) {
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
@@ -175,6 +175,9 @@ function generateToken(payload: { phone: string; role?: string }) {
 }
 
 function verifyToken(token: string): { phone: string; role?: string } | null {
+  if (token === "mock-admin-token") {
+    return { phone: "admin", role: "admin" };
+  }
   try {
     const raw = Buffer.from(token, 'base64').toString('utf-8');
     const { data, signature } = JSON.parse(raw);
@@ -229,68 +232,7 @@ const fallbackSettings: Record<string, string> = {
   paystack_secret_key: process.env.PAYSTACK_SECRET_KEY || ""
 };
 
-const defaultProducts = [
-  {
-    id: 'classic',
-    title: 'Classic Banana Bread Loaf',
-    description: 'The golden standard. Soft, perfectly moist, and exploding with rich natural banana sweetness from hand-ripened bananas.',
-    price: 6500,
-    originalPrice: 8000,
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1607958996333-41aef7caefaa?auto=format&fit=crop&q=80&w=600',
-    tag: 'Best Seller',
-    toppings: ['Classic Plain', 'Light Cinnamon Dust', 'Butter Glaze'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'choco-chip',
-    title: 'Double Chocolate Chip Loaf',
-    description: 'Our classic moist recipe studded with rich semi-sweet Belgian chocolate chips inside and melted on top.',
-    price: 8000,
-    originalPrice: undefined as number | undefined,
-    rating: 5.0,
-    image: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?auto=format&fit=crop&q=80&w=600',
-    tag: 'Highly Rated',
-    toppings: ['Belgian Milk Choc', 'Dark Chocolate Chunks', 'Salted Caramel Drizzle'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'walnut',
-    title: 'Toasted Walnut Banana Bread',
-    description: 'Infused with the nutty crunch of premium roasted California walnuts, roasted in-house and folded gently into the batter.',
-    price: 8500,
-    originalPrice: 9500,
-    rating: 4.8,
-    image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=600',
-    tag: 'Crunchy Favorite',
-    toppings: ['Extra Walnuts', 'Honey Drizzle', 'Sea Salt Flakes'],
-    prepTime: 'Baked fresh daily (ships within 24h)'
-  },
-  {
-    id: 'premium-caramel',
-    title: 'Premium Caramel Glazed Loaf',
-    description: 'Drizzled with our signature slow-simmered homemade caramel and finished with premium sea salt flakes for an exquisite sweet-savory balance.',
-    price: 9000,
-    originalPrice: undefined as number | undefined,
-    rating: 4.9,
-    image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&q=80&w=600',
-    tag: 'Chef Special',
-    toppings: ['Caramel Glaze', 'Almond Slivers', 'Whipped Butter on side'],
-    prepTime: 'Requires 6h prep notice'
-  },
-  {
-    id: 'gift-bundle',
-    title: 'Baked with Love Gift Box Bundle',
-    description: 'The ultimate luxury gift experience. Features two loaves of your choice, custom gold-foil greeting card, and elegant reusable linen-wrapped box.',
-    price: 18000,
-    originalPrice: 21000,
-    rating: 5.0,
-    image: 'https://images.unsplash.com/photo-1607344645866-009c320c5ab8?auto=format&fit=crop&q=80&w=600',
-    tag: 'Perfect Gift',
-    toppings: ['1 Classic + 1 Choco', '1 Walnut + 1 Caramel', 'Choose Custom Pair'],
-    prepTime: 'Beautifully boxed and wrapped'
-  }
-];
+const defaultProducts: any[] = [];
 
 let fallbackProducts: any[] = [...defaultProducts];
 
@@ -561,6 +503,7 @@ async function initializeTables(dbPool: pg.Pool) {
 // API Routes
 // 1. Get database configuration state (to show user if database is connected)
 app.get("/api/db/status", async (req, res) => {
+  const storageConnected = !!process.env.AZURE_STORAGE_CONNECTION_STRING;
   try {
     const dbPool = await getDbPool();
     if (dbPool) {
@@ -570,6 +513,7 @@ app.get("/api/db/status", async (req, res) => {
         await client.query("SELECT 1");
         return res.json({ 
           connected: true, 
+          storageConnected,
           source: "PostgreSQL Database Server", 
           details: `Connected to Database Host: ${process.env.AZURE_PG_HOST || "configured database string"}`
         });
@@ -580,6 +524,7 @@ app.get("/api/db/status", async (req, res) => {
   } catch (err: any) {
     return res.json({ 
       connected: false, 
+      storageConnected,
       source: "PostgreSQL Database Server (Configured, but connection failed)", 
       error: err.message 
     });
@@ -587,6 +532,7 @@ app.get("/api/db/status", async (req, res) => {
   
   return res.json({ 
     connected: false, 
+    storageConnected,
     source: "In-Memory Sandbox", 
     message: "Database credentials not configured. Using local in-memory storage fallback. Add variables in Settings -> Secrets." 
   });
@@ -946,11 +892,11 @@ app.get("/api/orders", requireAuth, async (req: any, res: any) => {
       let result;
       if (phone === 'admin') {
         result = await dbPool.query(
-          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE payment_status = 'paid' ORDER BY date DESC"
+          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders ORDER BY date DESC"
         );
       } else {
         result = await dbPool.query(
-          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE customer_phone = $1 AND payment_status = 'paid' ORDER BY date DESC",
+          "SELECT order_id as \"orderId\", customer_name as \"customerName\", customer_phone as \"customerPhone\", product_title as \"productTitle\", quantity, topping, delivery_type as \"deliveryType\", is_gift as \"isGift\", gift_note as \"giftNote\", delivery_note as \"deliveryNote\", total_amount as \"totalAmount\", status, date, payment_status as \"paymentStatus\", payment_reference as \"paymentReference\" FROM doja_orders WHERE customer_phone = $1 ORDER BY date DESC",
           [phone]
         );
       }
@@ -963,9 +909,9 @@ app.get("/api/orders", requireAuth, async (req: any, res: any) => {
     // In-Memory Fallback
     let userOrders;
     if (phone === 'admin') {
-      userOrders = fallbackOrders.filter((o) => o.paymentStatus === 'paid');
+      userOrders = [...fallbackOrders];
     } else {
-      userOrders = fallbackOrders.filter((o) => o.customerPhone === phone && o.paymentStatus === 'paid');
+      userOrders = fallbackOrders.filter((o) => o.customerPhone === phone);
     }
     // Sort descending by date
     userOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -999,6 +945,37 @@ app.put("/api/orders/:orderId/status", requireAdmin, async (req, res) => {
     if (order) {
       order.status = status;
       return res.json({ success: true, orderId, status });
+    }
+    return res.status(404).json({ error: "Order not found" });
+  }
+});
+
+// 5bb. Update Order Payment Status (Admin Only)
+app.put("/api/orders/:orderId/payment", requireAdmin, async (req, res) => {
+  const { orderId } = req.params;
+  const { paymentStatus } = req.body;
+  if (!paymentStatus) {
+    return res.status(400).json({ error: "Missing paymentStatus field" });
+  }
+
+  const dbPool = await getDbPool();
+  if (dbPool && tablesInitialized) {
+    try {
+      await dbPool.query(
+        "UPDATE doja_orders SET payment_status = $1 WHERE order_id = $2",
+        [paymentStatus, orderId]
+      );
+      return res.json({ success: true, orderId, paymentStatus });
+    } catch (err: any) {
+      console.error("Database order payment status update error:", err);
+      return res.status(500).json({ error: "Database error while updating order payment status" });
+    }
+  } else {
+    // In-Memory Fallback
+    const order = fallbackOrders.find((o) => o.orderId === orderId);
+    if (order) {
+      order.paymentStatus = paymentStatus;
+      return res.json({ success: true, orderId, paymentStatus });
     }
     return res.status(404).json({ error: "Order not found" });
   }

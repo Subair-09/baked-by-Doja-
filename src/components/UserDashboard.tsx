@@ -3,7 +3,7 @@ import {
   X, Database, ShoppingBag, TrendingUp, Compass, Award, RefreshCw, ChevronRight, Package, 
   Sparkles, Users, ChevronDown, ChevronUp, Check, LogOut, LayoutDashboard, User,
   CreditCard, MessageSquare, Star, Trash2, Plus, Minus, LogIn, ShoppingCart, Clock, ShieldCheck, Truck, AlertTriangle,
-  UploadCloud, Loader2
+  UploadCloud, Loader2, Wallet, Building2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
@@ -62,7 +62,7 @@ export default function UserDashboard({
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dbStatus, setDbStatus] = useState<{ connected: boolean; source: string }>({ connected: false, source: 'Checking...' });
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; source: string; storageConnected?: boolean }>({ connected: false, source: 'Checking...', storageConnected: false });
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
@@ -393,10 +393,10 @@ export default function UserDashboard({
       const res = await fetch('/api/db/status');
       if (res.ok) {
         const data = await res.json();
-        setDbStatus({ connected: data.connected, source: data.source });
+        setDbStatus({ connected: data.connected, source: data.source, storageConnected: data.storageConnected });
       }
     } catch {
-      setDbStatus({ connected: false, source: 'Offline Sandbox' });
+      setDbStatus({ connected: false, source: 'Offline Sandbox', storageConnected: false });
     }
   };
 
@@ -966,6 +966,120 @@ export default function UserDashboard({
     );
   };
 
+  const handleMarkOrderAsPaid = async (orderId: string) => {
+    showConfirm(
+      'Verify Bank Transfer',
+      'Are you sure you have verified the bank transfer for this order and want to mark it as PAID?',
+      async () => {
+        try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (currentUser?.token) {
+            headers['Authorization'] = `Bearer ${currentUser.token}`;
+          }
+          const res = await fetch(`/api/orders/${orderId}/payment`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ paymentStatus: 'paid' })
+          });
+          if (res.ok) {
+            triggerToast(`Order ${orderId} successfully marked as PAID!`, 'success');
+            fetchOrders(); // Reload orders
+          } else {
+            const data = await res.json().catch(() => ({}));
+            triggerToast(data.error || 'Failed to update payment status', 'error');
+          }
+        } catch (err: any) {
+          triggerToast(err.message || 'Error updating payment status', 'error');
+        }
+      }
+    );
+  };
+
+  const handleBankTransferPayment = async () => {
+    if (cartItems.length === 0) {
+      triggerToast("Your cart is empty!", "error");
+      return;
+    }
+    if (!currentUser) {
+      triggerToast("Please login/register to authorize your purchase", "error");
+      setCurrentTab('auth');
+      return;
+    }
+    if (!transferSenderName.trim()) {
+      triggerToast("Please enter your transfer Sender Name!", "error");
+      return;
+    }
+
+    setIsPaying(true);
+    setPaymentStepText("Filing your order with Faridah's baking queue...");
+
+    // Generate unique order ID
+    const orderId = `DOJA-${Math.floor(100000 + Math.random() * 900000)}`;
+    const consolidatedTitle = cartItems.map(i => `${i.quantity}x ${i.product.title} (${i.topping})`).join(', ');
+
+    const orderData = {
+      orderId,
+      customerName: checkoutName || currentUser.name,
+      customerPhone: checkoutPhone || currentUser.phone,
+      productTitle: consolidatedTitle,
+      quantity: cartItems.reduce((acc, c) => acc + c.quantity, 0),
+      topping: cartItems[0]?.topping || 'Classic Plain',
+      deliveryType,
+      isGift: cartItems.some(i => i.isGift),
+      giftNote: cartItems.find(i => i.isGift)?.giftNote || { to: '', from: '', message: '' },
+      deliveryNote: deliveryNote || "Outlet collection requested.",
+      totalAmount: getCartGrandTotal(),
+    };
+
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+
+      if (!res.ok) {
+        throw new Error('Server failed to register the unpaid order.');
+      }
+
+      // Sync UI & state
+      await fetchOrders();
+      setSelectedOrderId(orderId);
+      deductInventoryForOrder(cartItems);
+
+      // Award some points anyway (100 XP per loaf ordered)
+      const totalQty = cartItems.reduce((acc, c) => acc + c.quantity, 0);
+      const userPhoneForXP = checkoutPhone || currentUser?.phone || "anonymous";
+      setLoyaltyPoints(prev => {
+        const current = prev[userPhoneForXP] || 0;
+        return { ...prev, [userPhoneForXP]: current + (totalQty * 100) };
+      });
+
+      // Save locally as unpaid order
+      try {
+        const existing = localStorage.getItem('baked_by_doja_orders');
+        const localOrders = existing ? JSON.parse(existing) : [];
+        localOrders.push({
+          ...orderData,
+          status: 'pending',
+          paymentStatus: 'unpaid',
+          date: new Date().toISOString()
+        });
+        localStorage.setItem('baked_by_doja_orders', JSON.stringify(localOrders));
+      } catch {}
+
+      setCartItems([]);
+      setIsPaying(false);
+      setTransferSenderName('');
+      triggerToast("Order placed! Faridah will verify your Bank Transfer.", "success");
+      setCurrentTab('track');
+    } catch (err: any) {
+      console.error("Bank transfer submit error:", err);
+      triggerToast(err.message || "Failed to submit bank transfer order notification.", "error");
+      setIsPaying(false);
+    }
+  };
+
   const handleUpdateStatusId = async (orderId: string, nextStatus: string) => {
     setIsUpdatingStatusId(orderId);
     try {
@@ -1135,8 +1249,9 @@ export default function UserDashboard({
 
   // Cart helper actions
   const addToCart = (product: Product, quantity: number, topping: string, isGift: boolean, giftNoteObj: any) => {
+    if (!product) return;
     const existingIndex = cartItems.findIndex(
-      item => item.product.id === product.id && item.topping === topping && item.isGift === isGift
+      item => item.product && item.product.id === product.id && item.topping === topping && item.isGift === isGift
     );
 
     if (existingIndex > -1) {
@@ -1418,10 +1533,8 @@ export default function UserDashboard({
 
   if (!isOpen) return null;
 
-  // Filter orders for the customer so that only paid/successful transactions display
-  const displayOrders = currentUser && currentUser.role === 'admin'
-    ? orders
-    : orders.filter(o => o.paymentStatus === 'paid');
+  // Filter orders for the customer so they can see all their orders (paid and unpaid/pending bank verification)
+  const displayOrders = orders;
 
   const activeOrder = displayOrders.find(o => o.orderId === selectedOrderId) || displayOrders[0];
   const nonRejectedOrders = displayOrders.filter(o => o.status !== 'rejected');
@@ -1639,6 +1752,12 @@ export default function UserDashboard({
               <Database className="w-2.5 h-2.5 text-emerald-500" />
               <span>{dbStatus.connected ? 'Live Connect' : 'Local Sandboxed Storage'}</span>
             </p>
+            {dbStatus.storageConnected && (
+              <p className="flex items-center justify-center gap-1 font-bold text-blue-600 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                <span>Cloud Storage Connected</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -1835,7 +1954,17 @@ export default function UserDashboard({
               {/* TAB 3: PRODUCT DETAILS */}
               {currentTab === 'details' && (
                 <div className="bg-white border border-chocolate/5 rounded-3xl p-6 sm:p-8 shadow-sm">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                  {!selectedProduct ? (
+                    <div className="text-center py-16 space-y-4">
+                      <Sparkles className="w-12 h-12 text-caramel mx-auto animate-pulse" />
+                      <h4 className="font-serif font-black text-lg text-chocolate">No product selected</h4>
+                      <p className="text-xs text-chocolate/50 max-w-sm mx-auto">Please browse through our fresh bread catalog and choose a recipe to customize.</p>
+                      <button onClick={() => setCurrentTab('browse')} className="bg-banana hover:bg-honey text-chocolate font-bold text-xs px-5 py-2.5 rounded-full shadow-md transition-all cursor-pointer">
+                        Browse Menu
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                     {/* Detail Image */}
                     <div className="md:col-span-5 space-y-4">
                       <div className="h-64 sm:h-80 rounded-2xl overflow-hidden border border-chocolate/5 shadow-inner">
@@ -2011,6 +2140,7 @@ export default function UserDashboard({
                       </div>
                     </div>
                   </div>
+                )}
                 </div>
               )}
 
@@ -2283,58 +2413,148 @@ export default function UserDashboard({
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-8 text-left">
                     {/* Left: Interactive Payment form selector */}
                     <div className="md:col-span-7 space-y-5">
-                      {/* PAYSTACK RENDER */}
-                      <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
-                        <div className="flex items-start gap-4">
-                          <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-800 shrink-0">
-                            <ShieldCheck className="w-5 h-5" />
+                      {/* Payment Method Selector */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => setPaymentMethod('paystack')}
+                          className={`px-4 py-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                            paymentMethod === 'paystack'
+                              ? 'bg-chocolate border-chocolate text-white shadow-sm'
+                              : 'bg-beige/5 border-chocolate/10 text-chocolate hover:bg-beige/10'
+                          }`}
+                        >
+                          <CreditCard className="w-4 h-4 shrink-0" />
+                          <span className="text-xs font-bold font-serif">Paystack Online</span>
+                        </button>
+                        <button
+                          onClick={() => setPaymentMethod('transfer')}
+                          className={`px-4 py-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                            paymentMethod === 'transfer'
+                              ? 'bg-chocolate border-chocolate text-white shadow-sm'
+                              : 'bg-beige/5 border-chocolate/10 text-chocolate hover:bg-beige/10'
+                          }`}
+                        >
+                          <Wallet className="w-4 h-4 shrink-0" />
+                          <span className="text-xs font-bold font-serif">Bank Transfer</span>
+                        </button>
+                      </div>
+
+                      {paymentMethod === 'paystack' ? (
+                        /* PAYSTACK RENDER */
+                        <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
+                          <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-800 shrink-0">
+                              <ShieldCheck className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="font-serif font-black text-chocolate text-sm">Paystack Secure Checkout</h4>
+                              <p className="text-[11px] text-chocolate/60 leading-normal">
+                                Your order is verified and ready. Complete your banana bread purchase using Paystack's secure checkout portal. Pay safely with your Card, USSD, or Bank App.
+                              </p>
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <h4 className="font-serif font-black text-chocolate text-sm">Paystack Secure Checkout</h4>
-                            <p className="text-[11px] text-chocolate/60 leading-normal">
-                              Your order is verified and ready. Complete your banana bread purchase using Paystack's secure checkout portal. Pay safely with your Card, USSD, or Bank App.
+
+                          <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3 shadow-sm">
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className="text-chocolate/50 font-black uppercase">Authentication Gate</span>
+                              {activePaystackPublicKey ? (
+                                <span className="bg-emerald-100 text-emerald-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                  ACTIVE SECURE GATE
+                                </span>
+                              ) : (
+                                <span className="bg-amber-100 text-amber-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                                  PENDING GATEWAY SETUP
+                                </span>
+                              )}
+                            </div>
+                            
+                            <p className="text-[10px] text-chocolate/50 leading-normal">
+                              {activePaystackPublicKey 
+                                ? "Your checkout executes securely via Paystack API with full cryptographic verification."
+                                : "Please ensure the administrator has saved your Paystack keys in the settings dashboard to initiate real transactions."
+                              }
                             </p>
                           </div>
-                        </div>
 
-                        <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3 shadow-sm">
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-chocolate/50 font-black uppercase">Authentication Gate</span>
-                            {activePaystackPublicKey ? (
-                              <span className="bg-emerald-100 text-emerald-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                                ACTIVE SECURE GATE
-                              </span>
-                            ) : (
-                              <span className="bg-amber-100 text-amber-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                                PENDING GATEWAY SETUP
-                              </span>
-                            )}
+                          <div className="pt-2 text-center">
+                            <button
+                              onClick={handlePaystackPayment}
+                              disabled={isPaying}
+                              className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <CreditCard className="w-4 h-4 text-banana animate-bounce" />
+                              {isPaying ? "Opening Paystack Gateway..." : "Launch Paystack Checkout"}
+                            </button>
+                            <span className="block text-[9px] text-chocolate/40 mt-2 leading-relaxed">
+                              Secured by Paystack Inline. Faridah's bakery never logs your payment credentials.
+                            </span>
                           </div>
-                          
-                          <p className="text-[10px] text-chocolate/50 leading-normal">
-                            {activePaystackPublicKey 
-                              ? "Your checkout executes securely via Paystack API with full cryptographic verification."
-                              : "Please ensure the administrator has saved your Paystack keys in the settings dashboard to initiate real transactions."
-                            }
-                          </p>
                         </div>
+                      ) : (
+                        /* BANK TRANSFER RENDER */
+                        <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
+                          <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-800 shrink-0">
+                              <Building2 className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="font-serif font-black text-chocolate text-sm">Direct Bank Transfer</h4>
+                              <p className="text-[11px] text-chocolate/60 leading-normal">
+                                Transfer your total payment directly to Faridah's bakery account. We'll verify and approve your order immediately upon receiving the transfer.
+                              </p>
+                            </div>
+                          </div>
 
-                        <div className="pt-2 text-center">
-                          <button
-                            onClick={handlePaystackPayment}
-                            disabled={isPaying}
-                            className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
-                          >
-                            <CreditCard className="w-4 h-4 text-banana animate-bounce" />
-                            {isPaying ? "Opening Paystack Gateway..." : "Launch Paystack Checkout"}
-                          </button>
-                          <span className="block text-[9px] text-chocolate/40 mt-2 leading-relaxed">
-                            Secured by Paystack Inline. Faridah's bakery never logs your payment credentials.
-                          </span>
+                          <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3.5 shadow-sm text-chocolate">
+                            <span className="block text-[9px] uppercase font-black tracking-wider text-chocolate/50">Faridah's Official Account</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+                              <div>
+                                <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Bank Name</span>
+                                <strong className="text-chocolate">Wema Bank (ALAT)</strong>
+                              </div>
+                              <div>
+                                <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Account Number</span>
+                                <strong className="text-chocolate tracking-wider">0254005898</strong>
+                              </div>
+                              <div className="sm:col-span-2 border-t border-chocolate/5 pt-2">
+                                <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Account Name</span>
+                                <strong className="text-chocolate">Baked By Doja Ltd.</strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 text-chocolate">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60">Sender Name on Bank App</label>
+                            <input
+                              type="text"
+                              value={transferSenderName}
+                              onChange={e => setTransferSenderName(e.target.value)}
+                              placeholder="e.g., Faridah Adeyemi"
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-medium"
+                              required
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal font-sans">
+                              Enter the exact name on your transfer debit receipt so Chef Faridah can verify it.
+                            </span>
+                          </div>
+
+                          <div className="pt-2 text-center">
+                            <button
+                              onClick={handleBankTransferPayment}
+                              disabled={isPaying}
+                              className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <ShieldCheck className="w-4 h-4 text-banana" />
+                              {isPaying ? "Submitting Order Request..." : "Submit Bank Transfer Notification"}
+                            </button>
+                            <span className="block text-[9px] text-chocolate/40 mt-2 leading-relaxed">
+                              Faridah will verify and trigger oven preparation.
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Right Payment Receipt Sidebar */}
@@ -2373,7 +2593,7 @@ export default function UserDashboard({
                           </div>
                         ) : (
                           <button
-                            onClick={handlePaystackPayment}
+                            onClick={paymentMethod === 'transfer' ? handleBankTransferPayment : handlePaystackPayment}
                             className="w-full bg-banana hover:bg-honey text-chocolate font-black uppercase tracking-wider py-3 rounded-xl text-xs transition-all shadow cursor-pointer text-center"
                           >
                             Authorize Payment
@@ -2563,7 +2783,9 @@ export default function UserDashboard({
                                     onClick={() => {
                                       // Search for product to re-add
                                       const mappedProd = allProducts.find(p => o.productTitle.includes(p.title)) || allProducts[0] || products[0];
-                                      addToCart(mappedProd, 1, o.topping || 'Classic Plain', o.isGift || false, o.giftNote || { to: '', from: '', message: '' });
+                                      if (mappedProd) {
+                                        addToCart(mappedProd, 1, o.topping || 'Classic Plain', o.isGift || false, o.giftNote || { to: '', from: '', message: '' });
+                                      }
                                       setCurrentTab('cart');
                                     }}
                                     className="bg-banana hover:bg-honey text-chocolate font-bold text-[10px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer"
@@ -3496,6 +3718,14 @@ export default function UserDashboard({
                                       }`}>
                                         {o.paymentStatus === 'paid' ? '✅ Paid' : '❌ Unpaid'}
                                       </span>
+                                      {o.paymentStatus !== 'paid' && (
+                                        <button
+                                          onClick={() => handleMarkOrderAsPaid(o.orderId)}
+                                          className="block mt-1 text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase px-1.5 py-0.5 rounded shadow-sm cursor-pointer"
+                                        >
+                                          Mark Paid
+                                        </button>
+                                      )}
                                     </div>
                                   </td>
                                   <td className="p-3 text-[10px] max-w-[130px] truncate" title={o.isGift ? `Gift card details: To: ${o.giftNote?.to || ''}, message: ${o.giftNote?.message || ''}` : 'No gift bundle'}>

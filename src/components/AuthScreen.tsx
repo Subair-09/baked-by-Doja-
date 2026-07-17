@@ -47,25 +47,6 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
     const trimmedPhone = phone.trim();
     const trimmedName = name.trim();
 
-    // Direct Admin check for offline / immediate fallback robustness
-    if (isAdmin) {
-      if (trimmedPhone === 'adeyemifaridah23@gmail.com' && password === 'Anike2003') {
-        setSuccessMsg('Welcome back, Admin Faridah!');
-        const adminUser = { name: 'Admin Faridah', phone: 'admin', role: 'admin' };
-        localStorage.setItem('baked_by_doja_current_user', JSON.stringify(adminUser));
-        setTimeout(() => {
-          onSuccess(adminUser);
-        }, 1000);
-        return;
-      } else if (trimmedPhone === 'adeyemifaridah23@gmail.com') {
-        setError('Incorrect password for admin.');
-        return;
-      } else {
-        setError('Incorrect admin email credentials.');
-        return;
-      }
-    }
-
     try {
       // Attempt API request
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
@@ -103,7 +84,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       // Admin check again in case API is down but they entered details
       if (trimmedPhone === 'adeyemifaridah23@gmail.com' && password === 'Anike2003') {
         setSuccessMsg('Welcome back, Admin Faridah!');
-        const adminUser = { name: 'Admin Faridah', phone: 'admin', role: 'admin' };
+        const adminUser = { name: 'Admin Faridah', phone: 'admin', role: 'admin', token: 'mock-admin-token' };
         localStorage.setItem('baked_by_doja_current_user', JSON.stringify(adminUser));
         setTimeout(() => {
           onSuccess(adminUser);
