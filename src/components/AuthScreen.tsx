@@ -8,7 +8,16 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
-  const [authTab, setAuthTab] = useState<'signup' | 'login' | 'admin'>('signup');
+  const isExplicitAdminUrl = typeof window !== 'undefined' && (
+    window.location.pathname === '/auth/login' || 
+    window.location.pathname === '/auth/login/' ||
+    window.location.hash === '#admin-login' ||
+    window.location.search.includes('admin=true')
+  );
+
+  const [authTab, setAuthTab] = useState<'signup' | 'login' | 'admin'>(() => {
+    return isExplicitAdminUrl ? 'admin' : 'signup';
+  });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -192,20 +201,22 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
           >
             Log In
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAuthTab('admin');
-              setError('');
-            }}
-            className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-xl transition-all ${
-              authTab === 'admin'
-                ? 'bg-chocolate text-cream shadow-sm border border-yellow-500/10'
-                : 'text-chocolate/60 hover:text-chocolate'
-            }`}
-          >
-            Admin
-          </button>
+          {isExplicitAdminUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                setAuthTab('admin');
+                setError('');
+              }}
+              className={`flex-1 py-2 text-[10px] sm:text-xs font-black rounded-xl transition-all ${
+                authTab === 'admin'
+                  ? 'bg-chocolate text-cream shadow-sm border border-yellow-500/10'
+                  : 'text-chocolate/60 hover:text-chocolate'
+              }`}
+            >
+              Admin
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4 max-w-sm mx-auto">

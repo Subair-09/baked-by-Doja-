@@ -252,8 +252,13 @@ export default function App() {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<'landing' | 'dashboard'>(() => {
     try {
+      const isExplicitAdminUrl = 
+        window.location.pathname === '/auth/login' || 
+        window.location.pathname === '/auth/login/' ||
+        window.location.hash === '#admin-login' ||
+        window.location.search.includes('admin=true');
       const params = new URLSearchParams(window.location.search);
-      if (params.has('payment_success') || params.has('reference')) {
+      if (params.has('payment_success') || params.has('reference') || isExplicitAdminUrl) {
         return 'dashboard';
       }
       return window.location.hash === '#dashboard' ? 'dashboard' : 'landing';
@@ -271,7 +276,18 @@ export default function App() {
   });
 
   const [editProductOnDashboard, setEditProductOnDashboard] = useState<Product | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<string>('browse');
+  const [dashboardTab, setDashboardTab] = useState<string>(() => {
+    try {
+      const isExplicitAdminUrl = 
+        window.location.pathname === '/auth/login' || 
+        window.location.pathname === '/auth/login/' ||
+        window.location.hash === '#admin-login' ||
+        window.location.search.includes('admin=true');
+      return isExplicitAdminUrl ? 'auth' : 'browse';
+    } catch {
+      return 'browse';
+    }
+  });
 
   const isCartEmpty = () => {
     try {
@@ -285,7 +301,17 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      setCurrentPage(window.location.hash === '#dashboard' ? 'dashboard' : 'landing');
+      const isExplicitAdminUrl = 
+        window.location.pathname === '/auth/login' || 
+        window.location.pathname === '/auth/login/' ||
+        window.location.hash === '#admin-login' ||
+        window.location.search.includes('admin=true');
+      if (isExplicitAdminUrl) {
+        setDashboardTab('auth');
+        setCurrentPage('dashboard');
+      } else {
+        setCurrentPage(window.location.hash === '#dashboard' ? 'dashboard' : 'landing');
+      }
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
