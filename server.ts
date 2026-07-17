@@ -589,7 +589,7 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   // Admin intercept
-  if (phone === "joemalik23@outlook.com") {
+  if (phone === "joemalik23@outlook.com" || phone === "adeyemifaridah23@gmail.com") {
     if (password === "Anike2003") {
       const user = {
         name: "Admin Faridah",

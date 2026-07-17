@@ -1746,19 +1746,7 @@ export default function UserDashboard({
             </nav>
           </div>
 
-          <div className="pt-6 border-t border-chocolate/5 text-[9px] text-chocolate/40 font-mono text-center space-y-1 mt-6 lg:mt-0">
-            <p>Baked by Doja Custom Studio</p>
-            <p className="flex items-center justify-center gap-1 font-bold">
-              <Database className="w-2.5 h-2.5 text-emerald-500" />
-              <span>{dbStatus.connected ? 'Live Connect' : 'Local Sandboxed Storage'}</span>
-            </p>
-            {dbStatus.storageConnected && (
-              <p className="flex items-center justify-center gap-1 font-bold text-blue-600 animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                <span>Cloud Storage Connected</span>
-              </p>
-            )}
-          </div>
+
         </div>
 
         {/* RIGHT WORKSPACE AREA */}

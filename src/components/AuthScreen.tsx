@@ -91,7 +91,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       console.warn("API Auth info/error, checking fallback:", err);
       
       // Admin check again in case API is down but they entered details
-      if (trimmedPhone === 'joemalik23@outlook.com' && password === 'Anike2003') {
+      if ((trimmedPhone === 'joemalik23@outlook.com' || trimmedPhone === 'adeyemifaridah23@gmail.com') && password === 'Anike2003') {
         setSuccessMsg('Welcome back, Admin Faridah!');
         const adminUser = { name: 'Admin Faridah', phone: 'admin', role: 'admin', token: 'mock-admin-token' };
         localStorage.setItem('baked_by_doja_current_user', JSON.stringify(adminUser));
