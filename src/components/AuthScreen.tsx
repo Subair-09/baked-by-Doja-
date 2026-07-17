@@ -329,21 +329,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
         </form>
       </div>
 
-      <div className="text-center mt-6 pt-4 border-t border-chocolate/5">
-        <button
-          type="button"
-          onClick={() => {
-            // Fill with a quick mock account to let them pass with 1 click if they really want
-            setName('Guest Customer');
-            setPhone('08000000000');
-            setPassword('1234');
-            setAuthTab('signup');
-          }}
-          className="text-[10px] text-chocolate/55 hover:text-chocolate font-bold underline transition-colors"
-        >
-          Fast Checkout as Guest Customer
-        </button>
-      </div>
+
     </div>
   );
 }
