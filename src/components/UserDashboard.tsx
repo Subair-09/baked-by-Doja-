@@ -55,13 +55,26 @@ export default function UserDashboard({
   gallery: propGallery, onGalleryChange, onRefreshGallery,
   galleryCategories = [], onRefreshGalleryCategories
 }: UserDashboardProps) {
-  const [currentTab, setCurrentTab] = useState<string>('browse');
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    if (currentUser?.role === 'admin') return 'admin';
+    if (!currentUser) return 'auth';
+    return initialTab || 'browse';
+  });
 
   useEffect(() => {
-    if (isOpen && initialTab) {
+    if (currentUser?.role === 'admin') {
+      if (currentTab !== 'admin') {
+        setCurrentTab('admin');
+      }
+    } else if (!currentUser) {
+      if (currentTab !== 'auth') {
+        setCurrentTab('auth');
+      }
+    } else if (isOpen && initialTab && currentTab === 'auth') {
+      // Transition from auth to requested initial tab once logged in
       setCurrentTab(initialTab);
     }
-  }, [isOpen, initialTab]);
+  }, [currentUser, currentTab, isOpen, initialTab]);
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1778,41 +1791,47 @@ export default function UserDashboard({
 
             {/* Sidebar navigation items */}
             <nav className="space-y-1">
-              <span className="block text-[9px] uppercase font-black tracking-widest text-chocolate/40 px-3 mb-2">Customer Navigation</span>
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentTab === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    onClick={() => {
-                      setCurrentTab(item.key);
-                      setIsSidebarMobileOpen(false);
-                    }}
-                    className={`
-                      w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group
-                      ${isActive 
-                        ? 'bg-chocolate text-white shadow-md' 
-                        : 'text-chocolate/70 hover:bg-beige/40 hover:text-chocolate'
-                      }
-                    `}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-banana' : 'text-caramel group-hover:scale-110 transition-transform'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.badge !== null && (
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${item.badgeColor || 'bg-chocolate text-white'}`}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              {currentUser?.role !== 'admin' && (
+                <>
+                  <span className="block text-[9px] uppercase font-black tracking-widest text-chocolate/40 px-3 mb-2">Customer Navigation</span>
+                  {menuItems
+                    .filter(item => currentUser ? true : item.key === 'auth')
+                    .map((item) => {
+                      const Icon = item.icon;
+                      const isActive = currentTab === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          onClick={() => {
+                            setCurrentTab(item.key);
+                            setIsSidebarMobileOpen(false);
+                          }}
+                          className={`
+                            w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group
+                            ${isActive 
+                              ? 'bg-chocolate text-white shadow-md' 
+                              : 'text-chocolate/70 hover:bg-beige/40 hover:text-chocolate'
+                            }
+                          `}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-banana' : 'text-caramel group-hover:scale-110 transition-transform'}`} />
+                            <span>{item.label}</span>
+                          </div>
+                          {item.badge !== null && (
+                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${item.badgeColor || 'bg-chocolate text-white'}`}>
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </>
+              )}
 
               {/* Admin Panel button if is admin */}
               {currentUser?.role === 'admin' && (
-                <div className="pt-3 border-t border-chocolate/5 mt-3">
+                <div className="pt-3">
                   <span className="block text-[9px] uppercase font-black tracking-widest text-chocolate/40 px-3 mb-2">Owner Controls</span>
                   <button
                     onClick={() => {
@@ -1842,7 +1861,9 @@ export default function UserDashboard({
             {/* Top Workspace Header Controls */}
             <div className="border-b border-chocolate/10 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-0.5">
-                <span className="text-[9px] uppercase tracking-widest font-black text-caramel">Customer Lounge Workspace</span>
+                <span className="text-[9px] uppercase tracking-widest font-black text-caramel">
+                  {currentUser?.role === 'admin' ? 'Store Admin Workspace' : 'Customer Lounge Workspace'}
+                </span>
                 <h4 className="text-xl sm:text-2xl font-serif font-black text-chocolate flex items-center gap-2">
                   <span>{
                     currentTab === 'auth' ? 'Loyalty Authentication Profile' :
@@ -4442,7 +4463,7 @@ export default function UserDashboard({
           </div>
 
           {/* Persistent checkout warning bottom bar */}
-          {cartItems.length > 0 && currentTab !== 'cart' && currentTab !== 'checkout' && currentTab !== 'payment' && (
+          {currentUser?.role !== 'admin' && cartItems.length > 0 && currentTab !== 'cart' && currentTab !== 'checkout' && currentTab !== 'payment' && (
             <motion.div
               initial={{ y: 100 }}
               animate={{ y: 0 }}

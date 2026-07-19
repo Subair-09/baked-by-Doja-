@@ -13,27 +13,27 @@ export const testimonials: Testimonial[] = [
   },
   {
     id: '2',
-    name: 'Chioma Nwachukwu',
-    role: 'Lifestyle Blogger',
+    name: 'Rukayat Abidoye',
+    role: 'from Tiktok',
     review: "I ordered one loaf of the Chocolate Chip banana bread and instantly became a loyal customer. The chocolate chips melt inside, and the bread stays moist for days!",
     rating: 5,
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150'
+    image: 'https://imgur.com/QSUspgE.png'
   },
   {
     id: '3',
-    name: 'Femi Johnson',
-    role: 'Father of Three',
+    name: 'Mubarak Ademola',
+    role: 'from Tiktok',
     review: "My kids absolutely love it for breakfast! It is wholesome, perfectly sweet, and has zero preservatives. It has become our Sunday morning family ritual with warm tea.",
     rating: 5,
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150'
+    image: 'https://imgur.com/Sucf5rt.png'
   },
   {
     id: '4',
-    name: 'Amina Bello',
+    name: 'Abigail A',
     role: 'University Student',
     review: "The price is incredibly affordable for this level of luxury. Fast delivery to my hostel and it arrived warm! Tastes like home in every single slice.",
     rating: 5,
-    image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=150'
+    image: 'https://imgur.com/pmLqOkZ.png'
   }
 ];
 
