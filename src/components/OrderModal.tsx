@@ -511,7 +511,7 @@ export default function OrderModal({ product, isOpen, onClose, currentUser, onAu
                             </div>
                           ) : (
                             <div className="p-3 bg-beige/60 border border-chocolate/5 rounded-xl text-[11px] text-chocolate/75 mb-4 leading-relaxed">
-                              <strong>Pickup Location:</strong> Baked by Doja Studio, 35 Hammed Oghere, Ikotun, Lagos. We will send you the exact pickup address and ready time.
+                              <strong>Pickup Location:</strong> Baked by Doja Studio, Hammed Oghere, Ikotun, Lagos. We will send you the exact pickup address and ready time.
                             </div>
                           )}
                         </div>

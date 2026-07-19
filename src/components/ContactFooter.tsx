@@ -130,7 +130,7 @@ export default function ContactFooter({ onOrderNowClick }: ContactFooterProps) {
                 </div>
                 <div>
                   <p className="text-xs text-cream/50 font-bold">Bakery Studio Hub</p>
-                  <p className="font-semibold text-white">35 Hammed Oghere, Ikotun, Lagos State, Nigeria</p>
+                  <p className="font-semibold text-white">Hammed Oghere, Ikotun, Lagos State, Nigeria</p>
                 </div>
               </div>
             </div>
