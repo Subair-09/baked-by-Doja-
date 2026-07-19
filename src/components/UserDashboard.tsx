@@ -27,6 +27,8 @@ interface UserDashboardProps {
   gallery?: GalleryItem[];
   onGalleryChange?: (gallery: GalleryItem[]) => void;
   onRefreshGallery?: () => Promise<GalleryItem[] | null>;
+  galleryCategories?: { key: string; label: string }[];
+  onRefreshGalleryCategories?: () => Promise<{ key: string; label: string }[] | null>;
 }
 
 interface CartItem {
@@ -50,7 +52,8 @@ const STATUS_STEPS = [
 export default function UserDashboard({ 
   isOpen, onClose, currentUser, onOrderNowClick, onAuthSuccess, editProductOnLoad, onResetEditProductOnLoad,
   products: propProducts, onProductsChange, initialTab, onRefreshProducts,
-  gallery: propGallery, onGalleryChange, onRefreshGallery
+  gallery: propGallery, onGalleryChange, onRefreshGallery,
+  galleryCategories = [], onRefreshGalleryCategories
 }: UserDashboardProps) {
   const [currentTab, setCurrentTab] = useState<string>('browse');
 
@@ -317,9 +320,13 @@ export default function UserDashboard({
   const [galleryForm, setGalleryForm] = useState({
     id: '',
     title: '',
-    category: 'loaves' as 'loaves' | 'pairing' | 'packaging' | 'lifestyle',
+    category: 'loaves' as string,
     image: ''
   });
+
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatKey, setNewCatKey] = useState('');
+  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [inventory, setInventory] = useState<Record<string, number>>(() => {
     try {
       const stored = localStorage.getItem('baked_by_doja_inventory');
@@ -832,7 +839,7 @@ export default function UserDashboard({
     setGalleryForm({
       id: item.id,
       title: item.title,
-      category: item.category as 'loaves' | 'pairing' | 'packaging' | 'lifestyle',
+      category: item.category as string,
       image: item.image
     });
   };
@@ -856,6 +863,85 @@ export default function UserDashboard({
         }
         setAllGallery(prev => prev.filter(g => g.id !== id));
         triggerToast('Gallery item removed and its image was cleaned up from storage.', 'info');
+      }
+    );
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatLabel || !newCatKey) {
+      triggerToast('Please provide both a label and a key for the category', 'error');
+      return;
+    }
+
+    const formattedKey = newCatKey.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+    if (!formattedKey) {
+      triggerToast('Invalid category key', 'error');
+      return;
+    }
+
+    setIsSubmittingCategory(true);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
+      const res = await fetch('/api/gallery/categories', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ key: formattedKey, label: newCatLabel.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          triggerToast(`Category "${newCatLabel}" added successfully!`, 'success');
+          setNewCatLabel('');
+          setNewCatKey('');
+          if (onRefreshGalleryCategories) {
+            await onRefreshGalleryCategories();
+          }
+        } else {
+          triggerToast(data.error || 'Failed to add category', 'error');
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        triggerToast(data.error || `Server responded with status ${res.status}`, 'error');
+      }
+    } catch (err: any) {
+      console.error('Failed to add category:', err);
+      triggerToast(err.message || 'Error saving category', 'error');
+    } finally {
+      setIsSubmittingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (key: string) => {
+    showConfirm(
+      'Are you sure you want to delete this category?',
+      'Warning: Gallery items in this category will not be automatically deleted, but their category tag won\'t show as a separate tab anymore.',
+      async () => {
+        try {
+          const headers: Record<string, string> = {};
+          if (currentUser?.token) {
+            headers['Authorization'] = `Bearer ${currentUser.token}`;
+          }
+          const res = await fetch(`/api/gallery/categories/${key}`, {
+            method: 'DELETE',
+            headers
+          });
+          if (res.ok) {
+            triggerToast('Category deleted successfully!', 'success');
+            if (onRefreshGalleryCategories) {
+              await onRefreshGalleryCategories();
+            }
+          } else {
+            const data = await res.json().catch(() => ({}));
+            triggerToast(data.error || 'Failed to delete category', 'error');
+          }
+        } catch (err: any) {
+          console.error('Failed to delete category:', err);
+          triggerToast(err.message || 'Error deleting category', 'error');
+        }
       }
     );
   };
@@ -4107,14 +4193,13 @@ export default function UserDashboard({
                             <label className="block text-[9px] font-black uppercase text-chocolate/60">Category</label>
                             <select
                               value={galleryForm.category}
-                              onChange={e => setGalleryForm({...galleryForm, category: e.target.value as any})}
+                              onChange={e => setGalleryForm({...galleryForm, category: e.target.value})}
                               className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-medium"
                               required
                             >
-                              <option value="loaves">Our Loaves</option>
-                              <option value="pairing">Perfect Pairings</option>
-                              <option value="packaging">Luxe Packaging</option>
-                              <option value="lifestyle">Lifestyle</option>
+                              {galleryCategories.map(cat => (
+                                <option key={cat.key} value={cat.key}>{cat.label}</option>
+                              ))}
                             </select>
                           </div>
 
@@ -4231,6 +4316,69 @@ export default function UserDashboard({
                             </button>
                           </div>
                         </form>
+                      </div>
+
+                      {/* Manage Gallery Categories / Tags Section */}
+                      <div className="bg-beige/5 border border-chocolate/5 rounded-2xl p-5 space-y-4 text-left">
+                        <span className="block text-[10px] font-black uppercase text-chocolate/50 tracking-wider">
+                          Manage Gallery Categories & Tags
+                        </span>
+                        
+                        {/* Add category form */}
+                        <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3">
+                          <div className="flex-1 space-y-1">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Category Label (Display Name)</label>
+                            <input
+                              type="text"
+                              value={newCatLabel}
+                              onChange={e => setNewCatLabel(e.target.value)}
+                              placeholder="e.g., Seasonal Specials"
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-medium"
+                              required
+                            />
+                          </div>
+                          <div className="w-full sm:w-48 space-y-1">
+                            <label className="block text-[9px] font-black uppercase text-chocolate/60">Category Key (ID / Tag)</label>
+                            <input
+                              type="text"
+                              value={newCatKey}
+                              onChange={e => setNewCatKey(e.target.value)}
+                              placeholder="e.g., seasonal"
+                              className="w-full bg-white border border-chocolate/10 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                              required
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <button
+                              type="submit"
+                              disabled={isSubmittingCategory}
+                              className="w-full sm:w-auto bg-chocolate hover:bg-chocolate/90 text-white font-extrabold text-[11px] uppercase tracking-wider py-2 px-5 h-[34px] rounded-xl shadow-md cursor-pointer transition-transform hover:scale-[1.01] flex items-center justify-center gap-1.5 whitespace-nowrap"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{isSubmittingCategory ? 'Adding...' : 'Add Tag'}</span>
+                            </button>
+                          </div>
+                        </form>
+
+                        {/* List of existing categories */}
+                        <div className="pt-2">
+                          <label className="block text-[9px] font-black uppercase text-chocolate/60 mb-2">Existing Category Tags</label>
+                          <div className="flex flex-wrap gap-2">
+                            {galleryCategories.map(cat => (
+                              <div key={cat.key} className="flex items-center gap-2 bg-white border border-chocolate/10 pl-3 pr-1.5 py-1 rounded-full text-xs text-chocolate font-medium shadow-sm">
+                                <span>{cat.label} <span className="text-[9px] font-mono text-chocolate/40 font-bold">({cat.key})</span></span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCategory(cat.key)}
+                                  className="p-1 hover:bg-rose-50 text-chocolate/40 hover:text-rose-600 rounded-full cursor-pointer transition-colors"
+                                  title={`Delete category: ${cat.label}`}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
                       {/* Current Showcase List */}

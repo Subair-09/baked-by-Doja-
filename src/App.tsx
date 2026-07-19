@@ -36,6 +36,25 @@ export default function App() {
     }
   });
 
+  const [galleryCategories, setGalleryCategories] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem('baked_by_doja_gallery_categories');
+      return stored ? JSON.parse(stored) : [
+        { key: 'loaves', label: 'Our Loaves' },
+        { key: 'pairing', label: 'Perfect Pairings' },
+        { key: 'packaging', label: 'Luxe Packaging' },
+        { key: 'lifestyle', label: 'Lifestyle' }
+      ];
+    } catch {
+      return [
+        { key: 'loaves', label: 'Our Loaves' },
+        { key: 'pairing', label: 'Perfect Pairings' },
+        { key: 'packaging', label: 'Luxe Packaging' },
+        { key: 'lifestyle', label: 'Lifestyle' }
+      ];
+    }
+  });
+
   useEffect(() => {
     const loadProductsFromServer = async () => {
       try {
@@ -65,6 +84,20 @@ export default function App() {
         console.error("Error loading gallery from server:", err);
       }
     };
+    const loadGalleryCategoriesFromServer = async () => {
+      try {
+        const res = await fetch('/api/gallery/categories');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.categories)) {
+            setGalleryCategories(data.categories);
+            localStorage.setItem('baked_by_doja_gallery_categories', JSON.stringify(data.categories));
+          }
+        }
+      } catch (err) {
+        console.error("Error loading gallery categories from server:", err);
+      }
+    };
     const loadPublicKeysAndPixel = async () => {
       try {
         const res = await fetch('/api/settings/public');
@@ -85,6 +118,7 @@ export default function App() {
     };
     loadProductsFromServer();
     loadGalleryFromServer();
+    loadGalleryCategoriesFromServer();
     loadPublicKeysAndPixel();
   }, []);
 
@@ -178,6 +212,24 @@ export default function App() {
       }
     } catch (err) {
       console.error("Error loading gallery from server:", err);
+    }
+    return null;
+  };
+
+  const refreshGalleryCategories = async () => {
+    try {
+      const res = await fetch('/api/gallery/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.categories)) {
+          setGalleryCategories(data.categories);
+          localStorage.setItem('baked_by_doja_gallery_categories', JSON.stringify(data.categories));
+          window.dispatchEvent(new Event('storage'));
+          return data.categories;
+        }
+      }
+    } catch (err) {
+      console.error("Error loading gallery categories from server:", err);
     }
     return null;
   };
@@ -428,7 +480,7 @@ export default function App() {
           <Testimonials />
 
           {/* Pinterest-style Gallery with zoomable Lightbox */}
-          <Gallery gallery={activeGallery} />
+          <Gallery gallery={activeGallery} categories={galleryCategories} />
 
           {/* Step by step Interactive Process Chart */}
           <HowItWorks />
@@ -458,6 +510,8 @@ export default function App() {
           gallery={activeGallery}
           onGalleryChange={saveGallery}
           onRefreshGallery={refreshGallery}
+          galleryCategories={galleryCategories}
+          onRefreshGalleryCategories={refreshGalleryCategories}
           initialTab={dashboardTab}
         />
       )}

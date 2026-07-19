@@ -29,7 +29,7 @@ export interface FAQItem {
 export interface GalleryItem {
   id: string;
   title: string;
-  category: 'loaves' | 'pairing' | 'packaging' | 'lifestyle';
+  category: string;
   image: string;
 }
 

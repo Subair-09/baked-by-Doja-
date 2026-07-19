@@ -289,6 +289,13 @@ const defaultGallery = [
 
 let fallbackGallery: any[] = [...defaultGallery];
 
+let fallbackCategories: any[] = [
+  { key: 'loaves', label: 'Our Loaves' },
+  { key: 'pairing', label: 'Perfect Pairings' },
+  { key: 'packaging', label: 'Luxe Packaging' },
+  { key: 'lifestyle', label: 'Lifestyle' }
+];
+
 let pool: pg.Pool | null = null;
 let tablesInitialized = false;
 let dbDisabledUntil = 0;
@@ -486,6 +493,33 @@ async function initializeTables(dbPool: pg.Pool) {
             `INSERT INTO doja_gallery (id, title, category, image)
              VALUES ($1, $2, $3, $4)`,
             [g.id, g.title, g.category, g.image]
+          );
+        }
+      }
+
+      // Create gallery categories table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS doja_gallery_categories (
+          key VARCHAR(50) PRIMARY KEY,
+          label VARCHAR(100) NOT NULL
+        );
+      `);
+
+      // Seed default categories if empty
+      const catCheck = await client.query("SELECT COUNT(*) FROM doja_gallery_categories");
+      if (parseInt(catCheck.rows[0].count, 10) === 0) {
+        console.log("🌱 Seeding default gallery categories to PostgreSQL...");
+        const defaultCategories = [
+          { key: 'loaves', label: 'Our Loaves' },
+          { key: 'pairing', label: 'Perfect Pairings' },
+          { key: 'packaging', label: 'Luxe Packaging' },
+          { key: 'lifestyle', label: 'Lifestyle' }
+        ];
+        for (const c of defaultCategories) {
+          await client.query(
+            `INSERT INTO doja_gallery_categories (key, label)
+             VALUES ($1, $2)`,
+            [c.key, c.label]
           );
         }
       }
@@ -775,6 +809,91 @@ app.post("/api/gallery", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("Database connection error for gallery save:", err);
     return res.status(500).json({ error: "Failed to connect to database for saving gallery" });
+  }
+});
+
+// Get gallery categories
+app.get("/api/gallery/categories", async (req, res) => {
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      const result = await dbPool.query(
+        `SELECT key, label FROM doja_gallery_categories ORDER BY label ASC`
+      );
+      return res.json({ success: true, categories: result.rows });
+    } else {
+      return res.json({ success: true, categories: fallbackCategories });
+    }
+  } catch (err: any) {
+    console.error("Error fetching categories from database:", err);
+    return res.json({ success: true, categories: fallbackCategories });
+  }
+});
+
+// Add a gallery category / tag
+app.post("/api/gallery/categories", requireAdmin, async (req, res) => {
+  const { key, label } = req.body;
+  if (!key || !label) {
+    return res.status(400).json({ error: "Category key and label are required" });
+  }
+
+  // Format key to lowercase, letters and underscores only to be safe
+  const formattedKey = key.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
+  if (!formattedKey) {
+    return res.status(400).json({ error: "Invalid category key" });
+  }
+
+  // Add/Update in memory fallback
+  const existingIndex = fallbackCategories.findIndex(c => c.key === formattedKey);
+  if (existingIndex !== -1) {
+    fallbackCategories[existingIndex] = { key: formattedKey, label: label.trim() };
+  } else {
+    fallbackCategories.push({ key: formattedKey, label: label.trim() });
+  }
+
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      await dbPool.query(
+        `INSERT INTO doja_gallery_categories (key, label)
+         VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+        [formattedKey, label.trim()]
+      );
+      return res.json({ success: true, message: "Category added successfully", category: { key: formattedKey, label: label.trim() } });
+    } else {
+      return res.json({ success: true, message: "Category added successfully to fallback in-memory store", category: { key: formattedKey, label: label.trim() } });
+    }
+  } catch (err: any) {
+    console.error("Error saving category to database:", err);
+    return res.status(500).json({ error: "Failed to save category to database" });
+  }
+});
+
+// Delete a gallery category / tag
+app.delete("/api/gallery/categories/:key", requireAdmin, async (req, res) => {
+  const { key } = req.params;
+  if (!key) {
+    return res.status(400).json({ error: "Category key is required" });
+  }
+
+  // Filter out in memory fallback
+  fallbackCategories = fallbackCategories.filter(c => c.key !== key);
+
+  try {
+    const dbPool = await getDbPool();
+    if (dbPool && tablesInitialized) {
+      await dbPool.query(
+        `DELETE FROM doja_gallery_categories WHERE key = $1`,
+        [key]
+      );
+      return res.json({ success: true, message: "Category deleted successfully" });
+    } else {
+      return res.json({ success: true, message: "Category deleted successfully from fallback in-memory store" });
+    }
+  } catch (err: any) {
+    console.error("Error deleting category from database:", err);
+    return res.status(500).json({ error: "Failed to delete category from database" });
   }
 });
 

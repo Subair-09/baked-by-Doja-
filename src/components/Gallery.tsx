@@ -6,21 +6,26 @@ import { GalleryItem } from '../types';
 
 interface GalleryProps {
   gallery?: GalleryItem[];
+  categories?: { key: string; label: string }[];
 }
 
-export default function Gallery({ gallery: propGallery }: GalleryProps) {
+export default function Gallery({ gallery: propGallery, categories: propCategories }: GalleryProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeImage, setActiveImage] = useState<GalleryItem | null>(null);
 
   const activeList = propGallery || gallery;
 
-  const categories = [
+  const defaultCategories = [
     { key: 'all', label: 'All Photos' },
     { key: 'loaves', label: 'Our Loaves' },
     { key: 'pairing', label: 'Perfect Pairings' },
     { key: 'packaging', label: 'Luxe Packaging' },
     { key: 'lifestyle', label: 'Lifestyle' },
   ];
+
+  const categories = propCategories
+    ? [{ key: 'all', label: 'All Photos' }, ...propCategories]
+    : defaultCategories;
 
   const filteredGallery = selectedCategory === 'all'
     ? activeList
