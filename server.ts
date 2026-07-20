@@ -1246,10 +1246,18 @@ app.get("/api/settings/public", async (req, res) => {
 
 // 5g. Verify Paystack Payment
 app.post("/api/payments/initialize", async (req, res) => {
-  const { email, amount, orderId, callbackUrl, metadata } = req.body;
+  let { email, amount, orderId, callbackUrl, metadata } = req.body;
 
   if (!email || !amount || !orderId) {
     return res.status(400).json({ success: false, message: "Missing required initialize fields" });
+  }
+
+  // Sanitize email to ensure it is valid for Paystack API (no spaces, +, or other invalid characters in username)
+  email = email.trim();
+  const parts = email.split('@');
+  if (parts.length === 2) {
+    const username = parts[0].replace(/[^a-zA-Z0-9._-]/g, '') || 'guest';
+    email = `${username}@${parts[1]}`;
   }
 
   const dbPool = await getDbPool();

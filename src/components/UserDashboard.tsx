@@ -1513,7 +1513,11 @@ export default function UserDashboard({
 
     // 2. Launch Paystack Redirect Checkout
     setPaymentStepText("Generating secure checkout portal...");
-    const userEmail = `${currentUser ? currentUser.phone : 'guest'}@bakedbydoja.com`;
+    
+    // Sanitize phone number to form a valid email address (remove spaces, pluses, parentheses)
+    const rawPhone = currentUser ? currentUser.phone : 'guest';
+    const cleanPhone = rawPhone.replace(/[^a-zA-Z0-9]/g, '') || 'guest';
+    const userEmail = `${cleanPhone}@bakedbydoja.com`;
     
     try {
       const initRes = await fetch('/api/payments/initialize', {
