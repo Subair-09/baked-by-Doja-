@@ -112,14 +112,14 @@ export default function Hero({ onOrderNowClick, onViewMenuClick }: HeroProps) {
             className="relative flex justify-center items-center"
           >
             {/* Image Wrapper with organic frame shadow */}
-            <div className="relative w-full max-w-md sm:max-w-lg aspect-square sm:aspect-[4/3] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/60 animate-float bg-chocolate/10">
+            <div className="relative w-full max-w-md sm:max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/60 animate-float bg-chocolate/5">
               <img
-                src="https://imgur.com/hI3nWDi.png"
+                src="https://imgur.com/1Xezx25.png"
                 alt="Freshly sliced Baked by Doja Banana Bread served with walnuts, bananas, and morning coffee"
-                className="w-full h-full object-cover select-none"
+                className="w-full h-auto block select-none"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 via-transparent to-transparent h-1/4 pointer-events-none" />
               <div className="absolute bottom-4 left-6 right-6 text-white text-xs drop-shadow-md flex items-center justify-between">
                 <span>Baked by Doja Loaf Serving</span>
                 <span>Warm &amp; Moist</span>
