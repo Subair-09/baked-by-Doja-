@@ -389,8 +389,14 @@ async function initializeTables(dbPool: pg.Pool) {
           name VARCHAR(255) NOT NULL,
           phone VARCHAR(255) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
+          email VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+      `);
+
+      // Defensively add email column if table already exists
+      await client.query(`
+        ALTER TABLE doja_users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
       `);
 
       // Create orders table
@@ -574,7 +580,7 @@ app.get("/api/db/status", async (req, res) => {
 
 // 2. User Registration
 app.post("/api/auth/register", async (req, res) => {
-  const { name, phone, password } = req.body;
+  const { name, phone, email, password } = req.body;
   if (!name || !phone || !password) {
     return res.status(400).json({ error: "Missing required fields" });
   }
@@ -585,29 +591,43 @@ app.post("/api/auth/register", async (req, res) => {
 
     if (dbPool && tablesInitialized) {
       // Check if user already exists
-      const checkRes = await dbPool.query("SELECT * FROM doja_users WHERE phone = $1", [phone]);
+      const checkRes = await dbPool.query(
+        "SELECT * FROM doja_users WHERE phone = $1 OR (email IS NOT NULL AND email = $2)",
+        [phone, email || '']
+      );
       if (checkRes.rows.length > 0) {
-        return res.status(400).json({ error: "A user with this phone number is already registered" });
+        const existing = checkRes.rows[0];
+        if (existing.phone === phone) {
+          return res.status(400).json({ error: "A user with this phone number is already registered" });
+        } else {
+          return res.status(400).json({ error: "A user with this email address is already registered" });
+        }
       }
 
       // Insert new user with hashed password
       const insertRes = await dbPool.query(
-        "INSERT INTO doja_users (name, phone, password) VALUES ($1, $2, $3) RETURNING name, phone",
-        [name, phone, hashedPassword]
+        "INSERT INTO doja_users (name, phone, email, password) VALUES ($1, $2, $3, $4) RETURNING name, phone, email",
+        [name, phone, email || null, hashedPassword]
       );
       const user = insertRes.rows[0];
       const token = generateToken({ phone: user.phone });
       return res.json({ success: true, user, token });
     } else {
       // In-Memory Fallback with hashed password
-      const exists = fallbackUsers.some((u) => u.phone === phone);
-      if (exists) {
+      const existsPhone = fallbackUsers.some((u) => u.phone === phone);
+      if (existsPhone) {
         return res.status(400).json({ error: "A user with this phone number is already registered" });
       }
-      const newUser = { name, phone, password: hashedPassword };
+      if (email) {
+        const existsEmail = fallbackUsers.some((u) => u.email === email);
+        if (existsEmail) {
+          return res.status(400).json({ error: "A user with this email address is already registered" });
+        }
+      }
+      const newUser = { name, phone, email, password: hashedPassword };
       fallbackUsers.push(newUser);
       const token = generateToken({ phone });
-      return res.json({ success: true, user: { name, phone }, token });
+      return res.json({ success: true, user: { name, phone, email }, token });
     }
   } catch (err: any) {
     console.error("Registration error:", err);
@@ -618,12 +638,14 @@ app.post("/api/auth/register", async (req, res) => {
 // 3. User Login
 app.post("/api/auth/login", async (req, res) => {
   const { phone, password } = req.body;
-  if (!phone || !password) {
-    return res.status(400).json({ error: "Missing phone or password" });
+  const identifier = (phone || req.body.email || req.body.identifier || "").trim();
+  
+  if (!identifier || !password) {
+    return res.status(400).json({ error: "Missing phone, email or password" });
   }
 
   // Admin intercept
-  if (phone === "joemalik23@outlook.com" || phone === "adeyemifaridah23@gmail.com") {
+  if (identifier === "joemalik23@outlook.com" || identifier === "adeyemifaridah23@gmail.com") {
     if (password === "Anike2003") {
       const user = {
         name: "Admin Faridah",
@@ -645,31 +667,31 @@ app.post("/api/auth/login", async (req, res) => {
     const dbPool = await getDbPool();
     if (dbPool && tablesInitialized) {
       const result = await dbPool.query(
-        "SELECT name, phone, password FROM doja_users WHERE phone = $1",
-        [phone]
+        "SELECT name, phone, email, password FROM doja_users WHERE phone = $1 OR email = $1",
+        [identifier]
       );
       if (result.rows.length === 0) {
-        return res.status(400).json({ error: "Incorrect phone number or password" });
+        return res.status(400).json({ error: "Incorrect credentials. Check phone number/email or password!" });
       }
       const user = result.rows[0];
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
-        return res.status(400).json({ error: "Incorrect phone number or password" });
+        return res.status(400).json({ error: "Incorrect credentials. Check phone number/email or password!" });
       }
       const token = generateToken({ phone: user.phone });
-      return res.json({ success: true, user: { name: user.name, phone: user.phone }, token });
+      return res.json({ success: true, user: { name: user.name, phone: user.phone, email: user.email }, token });
     } else {
       // In-Memory Fallback
-      const user = fallbackUsers.find((u) => u.phone === phone);
+      const user = fallbackUsers.find((u) => u.phone === identifier || u.email === identifier);
       if (!user) {
-        return res.status(400).json({ error: "Incorrect phone number or password" });
+        return res.status(400).json({ error: "Incorrect credentials. Check phone number/email or password!" });
       }
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) {
-        return res.status(400).json({ error: "Incorrect phone number or password" });
+        return res.status(400).json({ error: "Incorrect credentials. Check phone number/email or password!" });
       }
       const token = generateToken({ phone: user.phone });
-      return res.json({ success: true, user: { name: user.name, phone: user.phone }, token });
+      return res.json({ success: true, user: { name: user.name, phone: user.phone, email: user.email }, token });
     }
   } catch (err: any) {
     console.error("Login error:", err);

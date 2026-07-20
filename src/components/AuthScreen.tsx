@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { User, Phone, Lock, Sparkles, ArrowRight, LogIn, CheckCircle2, Mail } from 'lucide-react';
 
 interface AuthScreenProps {
-  onSuccess: (user: { name: string; phone: string; role?: string }) => void;
+  onSuccess: (user: { name: string; phone: string; email?: string; role?: string }) => void;
   onClose?: () => void;
 }
 
@@ -20,6 +20,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
   });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -28,7 +29,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
   const isAdmin = authTab === 'admin';
 
   // Helper to fetch registered users from localStorage
-  const getRegisteredUsers = (): Array<{ name: string; phone: string; password?: string }> => {
+  const getRegisteredUsers = (): Array<{ name: string; phone: string; email?: string; password?: string }> => {
     try {
       const stored = localStorage.getItem('baked_by_doja_users');
       return stored ? JSON.parse(stored) : [];
@@ -43,17 +44,18 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
     setSuccessMsg('');
 
     // Field validations
-    if (!phone || !password) {
+    if (authTab === 'signup' && (!phone || !email || !password || !name)) {
       setError('Please fill out all required fields.');
       return;
     }
 
-    if (authTab === 'signup' && !name) {
-      setError('Please tell us your name so we know who to bake for!');
+    if (isLogin && (!phone || !password)) {
+      setError('Please fill out all required fields.');
       return;
     }
 
     const trimmedPhone = phone.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     const trimmedName = name.trim();
 
     try {
@@ -61,7 +63,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
       const body = isLogin 
         ? { phone: trimmedPhone, password }
-        : { name: trimmedName, phone: trimmedPhone, password };
+        : { name: trimmedName, phone: trimmedPhone, email: trimmedEmail, password };
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -79,6 +81,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       const userPayload = {
         name: data.user.name,
         phone: data.user.phone,
+        email: data.user.email,
         role: data.user.role || (data.user.phone === 'admin' ? 'admin' : undefined),
         token: data.token
       };
@@ -105,9 +108,9 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
       const users = getRegisteredUsers();
 
       if (isLogin) {
-        // Login Logic Fallback
+        // Login Logic Fallback - search by phone OR email
         const foundUser = users.find(
-          (u) => u.phone.trim() === trimmedPhone && u.password === password
+          (u) => (u.phone.trim() === trimmedPhone || (u.email && u.email.trim().toLowerCase() === trimmedPhone.toLowerCase())) && u.password === password
         );
 
         if (foundUser) {
@@ -115,25 +118,33 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
           localStorage.setItem('baked_by_doja_current_user', JSON.stringify({
             name: foundUser.name,
             phone: foundUser.phone,
+            email: foundUser.email,
           }));
           setTimeout(() => {
-            onSuccess({ name: foundUser.name, phone: foundUser.phone });
+            onSuccess({ name: foundUser.name, phone: foundUser.phone, email: foundUser.email });
           }, 1000);
         } else {
           setError(err.message || 'Incorrect credentials. Please try again!');
         }
       } else {
-        // Register Logic Fallback
-        const userExists = users.some((u) => u.phone.trim() === trimmedPhone);
+        // Register Logic Fallback - check phone or email
+        const phoneExists = users.some((u) => u.phone.trim() === trimmedPhone);
+        const emailExists = users.some((u) => u.email && u.email.trim().toLowerCase() === trimmedEmail);
 
-        if (userExists) {
+        if (phoneExists) {
           setError('An account with this phone number already exists. Try logging in!');
+          return;
+        }
+
+        if (emailExists) {
+          setError('An account with this email address already exists. Try logging in!');
           return;
         }
 
         const newUser = {
           name: trimmedName,
           phone: trimmedPhone,
+          email: trimmedEmail,
           password: password,
         };
 
@@ -142,11 +153,12 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
         localStorage.setItem('baked_by_doja_current_user', JSON.stringify({
           name: newUser.name,
           phone: newUser.phone,
+          email: newUser.email,
         }));
 
         setSuccessMsg(`Account created! Welcoming you to the fresh sunrise bakery...`);
         setTimeout(() => {
-          onSuccess({ name: newUser.name, phone: newUser.phone });
+          onSuccess({ name: newUser.name, phone: newUser.phone, email: newUser.email });
         }, 1200);
       }
     }
@@ -242,30 +254,98 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
             </div>
           )}
 
-          {/* Phone Field / Email Field */}
-          <div className="space-y-1">
-            <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
-              {isAdmin ? 'Admin Email Address' : 'Phone Number (For WhatsApp / Delivery)'}
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
-                {isAdmin ? <Mail className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
-              </span>
-              <input
-                type={isAdmin ? "email" : "tel"}
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder={isAdmin ? "e.g. admin@example.com" : "e.g. 08012345678"}
-                className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
-              />
+          {/* Email Address Field (Sign Up Only) */}
+          {authTab === 'signup' && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
+                Email Address
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
+                  <Mail className="w-4 h-4" />
+                </span>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. adewale@example.com"
+                  className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Phone Number Field (Sign Up Only) */}
+          {authTab === 'signup' && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
+                Phone Number (For WhatsApp / Delivery)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
+                  <Phone className="w-4 h-4" />
+                </span>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 08012345678"
+                  className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Log In Identifier (Phone or Email) */}
+          {authTab === 'login' && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
+                Phone Number or Email Address
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
+                  <User className="w-4 h-4" />
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 08012345678 or adewale@example.com"
+                  className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Admin Email Field */}
+          {authTab === 'admin' && (
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
+                Admin Email Address
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
+                  <Mail className="w-4 h-4" />
+                </span>
+                <input
+                  type="email"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. admin@example.com"
+                  className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Password Field */}
           <div className="space-y-1">
             <label className="block text-[10px] font-black uppercase text-chocolate/70 tracking-wider">
-              {isAdmin ? 'Secret Admin Password' : 'Choose Password / PIN'}
+              {isAdmin ? 'Secret Admin Password' : 'Password'}
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-chocolate/40">
@@ -276,7 +356,7 @@ export default function AuthScreen({ onSuccess, onClose }: AuthScreenProps) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isAdmin ? "Enter secret code" : "Make it simple (e.g. 1234)"}
+                placeholder={isAdmin ? "Enter secret code" : "Enter a secure password"}
                 className="w-full bg-white border border-chocolate/10 rounded-2xl pl-10 pr-4 py-3 text-xs focus:border-caramel focus:outline-none focus:ring-1 focus:ring-caramel"
               />
             </div>
