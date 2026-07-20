@@ -213,19 +213,19 @@ export default function OrderModal({ product, isOpen, onClose, currentUser, onAu
                     <p className="text-[11px] text-chocolate/75 leading-relaxed">
                       Please make a bank transfer of <strong className="text-caramel">{formatPrice(grandTotalNGN)}</strong> to secure your sunrise baking slot:
                     </p>
-                    <div className="bg-white/80 border border-chocolate/5 p-3.5 rounded-xl space-y-1.5 font-mono text-xs">
+                    <div className="bg-white/80 border border-chocolate/5 p-3.5 rounded-xl space-y-1.5 font-mono text-xs font-bold">
                       <div className="flex justify-between">
                         <span className="text-chocolate/60">Bank Name:</span>
-                        <span className="font-bold">Wema Bank</span>
+                        <span className="font-bold text-chocolate">Moniepoint MFB</span>
                       </div>
                       <div className="flex justify-between items-center gap-2">
                         <span className="text-chocolate/60">Account Number:</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-black text-chocolate text-sm">0123456789</span>
+                          <span className="font-black text-chocolate text-sm">6968917221</span>
                           <button
                             type="button"
                             onClick={() => {
-                              navigator.clipboard.writeText('0123456789');
+                              navigator.clipboard.writeText('6968917221');
                               alert('Account Number copied to clipboard!');
                             }}
                             className="p-1 hover:bg-banana/30 rounded text-chocolate/60 hover:text-chocolate transition-colors cursor-pointer"
@@ -237,7 +237,7 @@ export default function OrderModal({ product, isOpen, onClose, currentUser, onAu
                       </div>
                       <div className="flex justify-between">
                         <span className="text-chocolate/60">Account Name:</span>
-                        <span className="font-bold text-chocolate">Baked by Doja</span>
+                        <span className="font-bold text-chocolate">Baked By Doja Sweet Creations Ventures</span>
                       </div>
                     </div>
                     <p className="text-[10px] text-chocolate/65 text-center italic mt-1">

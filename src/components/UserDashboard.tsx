@@ -2611,15 +2611,15 @@ export default function UserDashboard({
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
                               <div>
                                 <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Bank Name</span>
-                                <strong className="text-chocolate">Wema Bank (ALAT)</strong>
+                                <strong className="text-chocolate">Moniepoint MFB</strong>
                               </div>
                               <div>
                                 <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Account Number</span>
-                                <strong className="text-chocolate tracking-wider">0254005898</strong>
+                                <strong className="text-chocolate tracking-wider">6968917221</strong>
                               </div>
                               <div className="sm:col-span-2 border-t border-chocolate/5 pt-2">
                                 <span className="block text-[8px] font-black uppercase text-chocolate/40 font-sans">Account Name</span>
-                                <strong className="text-chocolate">Baked By Doja Ltd.</strong>
+                                <strong className="text-chocolate">Baked By Doja Sweet Creations Ventures</strong>
                               </div>
                             </div>
                           </div>

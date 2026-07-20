@@ -381,9 +381,9 @@ export default function App() {
 
   const handleAuthSuccess = (user: { name: string; phone: string; role?: string; token?: string }) => {
     setCurrentUser(user);
-    if (user.role === 'admin') {
-      setCurrentPage('dashboard');
-    }
+    setDashboardTab(user.role === 'admin' ? 'admin' : 'browse');
+    setCurrentPage('dashboard');
+    setIsOrderModalOpen(false);
   };
 
   const handleLogout = () => {
@@ -393,12 +393,6 @@ export default function App() {
 
   // Trigger default order modal or specific product (e.g. for reorders)
   const handleOpenOrderWithProduct = (productTitle?: string) => {
-    if (currentUser === null && isCartEmpty()) {
-      setDashboardTab('auth');
-      setCurrentPage('dashboard');
-      return;
-    }
-
     if (productTitle) {
       const target = activeProducts.find((p) => p.title.toLowerCase() === productTitle.toLowerCase() || p.id.toLowerCase() === productTitle.toLowerCase());
       if (target) {
@@ -408,19 +402,15 @@ export default function App() {
       }
     }
     const classicProduct = activeProducts.find((p) => p.id === 'classic') || activeProducts[0];
-    setSelectedProduct(classicProduct);
-    setIsOrderModalOpen(true);
+    if (classicProduct) {
+      setSelectedProduct(classicProduct);
+      setIsOrderModalOpen(true);
+    }
   };
 
   const handleOpenDefaultOrder = () => handleOpenOrderWithProduct();
 
   const handleProductOrder = (product: Product) => {
-    if (currentUser === null && isCartEmpty()) {
-      setDashboardTab('auth');
-      setCurrentPage('dashboard');
-      return;
-    }
-
     setSelectedProduct(product);
     setIsOrderModalOpen(true);
   };

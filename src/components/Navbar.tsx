@@ -136,7 +136,7 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
 
           {/* Right Controls */}
           <div className="hidden sm:flex items-center space-x-4">
-            {currentUser && (
+            {currentUser ? (
               <div className="relative">
                 {/* Profile Trigger Button */}
                 <button
@@ -217,6 +217,14 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
                   )}
                 </AnimatePresence>
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onViewDashboardClick}
+                className="text-chocolate/80 hover:text-chocolate font-sans font-black text-xs px-4 py-2 hover:bg-beige/40 rounded-full transition-all cursor-pointer"
+              >
+                Login / Register
+              </button>
             )}
 
             {/* Order Now Button */}
@@ -265,7 +273,7 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
             className="lg:hidden bg-cream border-b border-chocolate/10 shadow-lg overflow-hidden"
           >
             <div className="px-4 pt-2 pb-6 space-y-2">
-              {currentUser && (
+              {currentUser ? (
                 <div className="px-4 py-3 bg-beige/50 rounded-xl flex items-center justify-between border border-chocolate/5 mb-3">
                   <div className="flex items-center space-x-2">
                     <div className="w-8 h-8 rounded-full bg-caramel/10 flex items-center justify-center text-caramel font-bold text-xs select-none">
@@ -295,6 +303,19 @@ export default function Navbar({ onOrderNowClick, currentUser, onLogout, onViewD
                     className="text-xs text-caramel font-bold hover:underline cursor-pointer"
                   >
                     Log out
+                  </button>
+                </div>
+              ) : (
+                <div className="px-4 py-3 bg-beige/30 rounded-xl flex items-center justify-between border border-chocolate/5 mb-3">
+                  <span className="text-xs font-bold text-chocolate">Welcome to Baked by Doja</span>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      onViewDashboardClick();
+                    }}
+                    className="text-xs text-caramel font-black hover:underline cursor-pointer"
+                  >
+                    Login / Register
                   </button>
                 </div>
               )}
