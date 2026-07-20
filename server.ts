@@ -1645,6 +1645,25 @@ app.post("/api/inquiries", async (req, res) => {
     return res.status(400).json({ error: "Missing required inquiry fields" });
   }
 
+  // Forward to Formspree from server backend to bypass any browser CORS/CSP blocks
+  try {
+    const fsResponse = await fetch('https://formspree.io/f/mykrjjzd', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name, email, phone, loaf, message }),
+    });
+    if (!fsResponse.ok) {
+      console.warn(`⚠️ Formspree endpoint returned non-OK status: ${fsResponse.status}`);
+    } else {
+      console.log("✅ Inquiry successfully forwarded to Formspree from server backend");
+    }
+  } catch (fsErr: any) {
+    console.error('⚠️ Server-side Formspree forward failed:', fsErr.message || fsErr);
+  }
+
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
     try {

@@ -26,6 +26,7 @@ export default function ContactFooter({ onOrderNowClick }: ContactFooterProps) {
 
     setIsSubmitted(true);
 
+    // Submit to local API (which handles Formspree delivery server-side) & local storage
     try {
       const res = await fetch('/api/inquiries', {
         method: 'POST',
