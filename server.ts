@@ -8,8 +8,13 @@ import multer from "multer";
 import { BlobServiceClient } from "@azure/storage-blob";
 import crypto from "crypto";
 import helmet from "helmet";
+import { Resend } from "resend";
 
 dotenv.config();
+
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -944,6 +949,125 @@ app.get("/api/users", requireAdmin, async (req, res) => {
   }
 });
 
+// Helper to send order email notification using Resend
+const sendOrderEmailNotification = async (orderData: any) => {
+  if (!resend) {
+    console.log("⚠️ Resend API Key is not configured. Email notification skipped.");
+    return;
+  }
+
+  try {
+    const {
+      orderId,
+      customerName,
+      customerPhone,
+      productTitle,
+      quantity,
+      topping,
+      deliveryType,
+      isGift,
+      giftNote,
+      deliveryNote,
+      totalAmount
+    } = orderData;
+
+    const formattedAmount = typeof totalAmount === 'number' 
+      ? `₦${totalAmount.toLocaleString()}` 
+      : `₦${totalAmount}`;
+
+    let parsedGiftNote = giftNote;
+    if (typeof giftNote === 'string') {
+      try {
+        parsedGiftNote = JSON.parse(giftNote);
+      } catch {
+        parsedGiftNote = { message: giftNote };
+      }
+    }
+
+    const giftDetails = isGift && parsedGiftNote ? `
+      <div style="background-color: #fcf6f0; border-left: 4px solid #d97706; padding: 12px; margin-top: 10px; border-radius: 4px;">
+        <p style="margin: 0; font-weight: bold; color: #78350f;">🎁 Gift Order Details:</p>
+        <p style="margin: 4px 0 0 0;"><strong>To:</strong> ${parsedGiftNote.to || 'N/A'}</p>
+        <p style="margin: 4px 0 0 0;"><strong>From:</strong> ${parsedGiftNote.from || 'N/A'}</p>
+        <p style="margin: 4px 0 0 0;"><strong>Message:</strong> "${parsedGiftNote.message || ''}"</p>
+      </div>
+    ` : '';
+
+    const htmlContent = `
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #2d1e18; background-color: #faf6f0; border-radius: 12px; border: 1px solid #ebd8c5;">
+        <div style="text-align: center; border-bottom: 2px solid #ebd8c5; padding-bottom: 15px; margin-bottom: 20px;">
+          <h1 style="color: #653b1b; margin: 0; font-size: 24px; font-weight: bold;">🍞 New Order Received!</h1>
+          <p style="color: #d97706; margin: 5px 0 0 0; font-weight: bold; letter-spacing: 1px;">BAKED BY DOJA</p>
+        </div>
+        
+        <p style="font-size: 16px; line-height: 1.5;">Hello Chief,</p>
+        <p style="font-size: 15px; line-height: 1.5;">A new order has been placed on the Baked by Doja Sweet Creations portal. Below are the order details:</p>
+        
+        <div style="background-color: #ffffff; border: 1px solid #ebd8c5; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold; width: 130px;">Order ID:</td>
+              <td style="padding: 6px 0; font-weight: bold; color: #d97706;">#${orderId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Customer Name:</td>
+              <td style="padding: 6px 0; color: #2d1e18; font-weight: bold;">${customerName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Phone Number:</td>
+              <td style="padding: 6px 0;"><a href="tel:${customerPhone}" style="color: #653b1b; text-decoration: underline; font-weight: bold;">${customerPhone}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold; border-top: 1px solid #f3ebe1; padding-top: 10px;">Banana Bread:</td>
+              <td style="padding: 6px 0; color: #2d1e18; font-weight: bold; border-top: 1px solid #f3ebe1; padding-top: 10px;">${productTitle}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Quantity:</td>
+              <td style="padding: 6px 0; color: #2d1e18; font-weight: bold;">${quantity}x</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Topping:</td>
+              <td style="padding: 6px 0; color: #2d1e18;">${topping}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Delivery Type:</td>
+              <td style="padding: 6px 0; color: #2d1e18; font-weight: bold; text-transform: capitalize;">${deliveryType || 'standard'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #6e5445; font-weight: bold;">Total Amount:</td>
+              <td style="padding: 6px 0; font-weight: bold; color: #653b1b; font-size: 16px;">${formattedAmount}</td>
+            </tr>
+            ${deliveryNote ? `
+            <tr>
+              <td style="padding: 10px 0 6px 0; color: #6e5445; font-weight: bold; border-top: 1px solid #f3ebe1; vertical-align: top;">Delivery Note:</td>
+              <td style="padding: 10px 0 6px 0; color: #4a3429; font-style: italic; border-top: 1px solid #f3ebe1;">"${deliveryNote}"</td>
+            </tr>` : ''}
+          </table>
+          
+          ${giftDetails}
+        </div>
+        
+        <div style="text-align: center; font-size: 12px; color: #9c8375; border-top: 1px solid #ebd8c5; padding-top: 15px; margin-top: 20px;">
+          <p style="margin: 0;">This email is automatically generated by the Baked by Doja platform.</p>
+          <p style="margin: 4px 0 0 0;">Oven status and logs can be managed in the Admin Dashboard.</p>
+        </div>
+      </div>
+    `;
+
+    console.log(`✉️ Attempting to send order email notification for order #${orderId} to adeyemifaridah23@gmail.com...`);
+    const emailResult = await resend.emails.send({
+      from: "Baked by Doja <onboarding@resend.dev>",
+      to: "adeyemifaridah23@gmail.com",
+      subject: `🍞 New Order Received: #${orderId} (${customerName})`,
+      html: htmlContent,
+    });
+
+    console.log("✉️ Resend email sent successfully:", emailResult);
+  } catch (error) {
+    console.error("❌ Failed to send order email via Resend:", error);
+  }
+};
+
 // 4. Place Order
 app.post("/api/orders", async (req, res) => {
   const {
@@ -986,6 +1110,22 @@ app.post("/api/orders", async (req, res) => {
           'pending',
         ]
       );
+      
+      // Trigger email notification asynchronously via Resend
+      sendOrderEmailNotification({
+        orderId,
+        customerName,
+        customerPhone,
+        productTitle,
+        quantity,
+        topping,
+        deliveryType,
+        isGift,
+        giftNote,
+        deliveryNote,
+        totalAmount
+      });
+
       return res.json({ success: true, orderId });
     } catch (err: any) {
       console.error("Database order insertion error:", err);
@@ -1011,9 +1151,26 @@ app.post("/api/orders", async (req, res) => {
       date: new Date().toISOString(),
     };
     fallbackOrders.push(newOrder);
+
+    // Trigger email notification asynchronously via Resend
+    sendOrderEmailNotification({
+      orderId,
+      customerName,
+      customerPhone,
+      productTitle,
+      quantity,
+      topping,
+      deliveryType,
+      isGift,
+      giftNote,
+      deliveryNote,
+      totalAmount
+    });
+
     return res.json({ success: true, orderId });
   }
 });
+
 
 // 5. Get User Orders
 app.get("/api/orders", requireAuth, async (req: any, res: any) => {
