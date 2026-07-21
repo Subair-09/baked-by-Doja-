@@ -3,7 +3,7 @@ import {
   X, Database, ShoppingBag, TrendingUp, Compass, Award, RefreshCw, ChevronRight, Package, 
   Sparkles, Users, ChevronDown, ChevronUp, Check, LogOut, LayoutDashboard, User,
   CreditCard, MessageSquare, Star, Trash2, Plus, Minus, LogIn, ShoppingCart, Clock, ShieldCheck, Truck, AlertTriangle,
-  UploadCloud, Loader2, Wallet, Building2
+  UploadCloud, Loader2, Wallet, Building2, Eye, Monitor, Smartphone, Tablet, BarChart2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
@@ -319,6 +319,8 @@ export default function UserDashboard({
 
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [analyticsStats, setAnalyticsStats] = useState<any | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState({
     id: '',
@@ -666,6 +668,7 @@ export default function UserDashboard({
   useEffect(() => {
     if (isOpen && currentUser?.role === 'admin') {
       fetchUsers();
+      fetchAnalytics();
       if (adminSubTab === 'settings') {
         fetchSettings();
       }
@@ -761,6 +764,28 @@ export default function UserDashboard({
       console.error("Failed to fetch registered users:", e);
     } finally {
       setIsLoadingUsers(false);
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    setIsLoadingAnalytics(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+      }
+      const res = await fetch('/api/analytics/stats', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stats) {
+          setAnalyticsStats(data.stats);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch visitor analytics stats:", e);
+    } finally {
+      setIsLoadingAnalytics(false);
     }
   };
 
@@ -3483,6 +3508,209 @@ export default function UserDashboard({
 
                             <div className="bg-beige/10 p-3 rounded-xl border border-chocolate/5 mt-4 text-[10px] text-chocolate/60">
                               <strong>Faridah's Culinary Note:</strong> Lagos dispatch logistics auto-optimizes based on thermal cooling parameters to ensure banana bread slices remain warm during transit.
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Web Visitor Traffic & Analytics Section */}
+                        <div className="bg-white border border-chocolate/5 p-5 rounded-2xl space-y-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-chocolate/5">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase text-chocolate/50 tracking-wider">Web Traffic Analytics</span>
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                                <span className="text-[9px] text-emerald-600 font-extrabold tracking-wider uppercase">Active Traffic tracking</span>
+                              </div>
+                              <h4 className="font-serif font-black text-chocolate text-base mt-1">
+                                Live Visitor Engagement Insights
+                              </h4>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={fetchAnalytics}
+                              disabled={isLoadingAnalytics}
+                              className="self-start sm:self-center bg-chocolate/5 hover:bg-chocolate/10 text-chocolate px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isLoadingAnalytics ? 'animate-spin' : ''}`} />
+                              Refresh Metrics
+                            </button>
+                          </div>
+
+                          {/* Quick Traffic Counters */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col justify-between">
+                              <div className="flex items-center justify-between text-indigo-800">
+                                <span className="text-[9px] font-black uppercase tracking-wider">Total Page Views</span>
+                                <Eye className="w-4 h-4 text-indigo-600" />
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-3xl font-serif font-black text-indigo-950 leading-none">
+                                  {analyticsStats?.totalVisits?.toLocaleString() ?? '...'}
+                                </h3>
+                                <p className="text-[10px] text-indigo-700/70 mt-1.5">Accumulated page visit requests</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 flex flex-col justify-between">
+                              <div className="flex items-center justify-between text-violet-800">
+                                <span className="text-[9px] font-black uppercase tracking-wider">Unique Visitors</span>
+                                <Users className="w-4 h-4 text-violet-600" />
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-3xl font-serif font-black text-violet-950 leading-none">
+                                  {analyticsStats?.uniqueVisitors?.toLocaleString() ?? '...'}
+                                </h3>
+                                <p className="text-[10px] text-violet-700/70 mt-1.5">Distinct user browser sessions</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between">
+                              <div className="flex items-center justify-between text-emerald-800">
+                                <span className="text-[9px] font-black uppercase tracking-wider">Live Active (Last 30m)</span>
+                                <span className="flex h-2.5 w-2.5 relative">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </span>
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-3xl font-serif font-black text-emerald-950 leading-none">
+                                  {analyticsStats?.activeVisitors?.toLocaleString() ?? '...'}
+                                </h3>
+                                <p className="text-[10px] text-emerald-700/70 mt-1.5">Real-time engagement queue</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+                            {/* Daily Visitor Trends Chart (7 Days) */}
+                            <div className="lg:col-span-7 bg-cream/10 border border-chocolate/5 p-4 rounded-xl flex flex-col justify-between min-h-[220px]">
+                              <div>
+                                <div className="flex justify-between items-center pb-2 border-b border-chocolate/5">
+                                  <span className="text-[10px] font-black uppercase text-chocolate/60 tracking-wider">Daily Visits (Last 7 Days)</span>
+                                  <span className="text-[9px] font-bold text-chocolate/40 font-mono">Hits chart</span>
+                                </div>
+                                
+                                {analyticsStats?.dailyTrends && analyticsStats.dailyTrends.length > 0 ? (
+                                  <div className="flex items-end justify-between gap-2 h-32 pt-6">
+                                    {analyticsStats.dailyTrends.map((trend: any) => {
+                                      const maxCount = Math.max(...analyticsStats.dailyTrends.map((t: any) => t.count), 1);
+                                      const pctHeight = Math.max(8, (trend.count / maxCount) * 100);
+                                      
+                                      const dateObj = new Date(trend.date);
+                                      const formattedDay = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                                      const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                                      return (
+                                        <div key={trend.date} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                                          {/* Floating tooltip */}
+                                          <div className="absolute -top-7 scale-0 group-hover:scale-100 transition-all duration-150 bg-chocolate text-white text-[9px] font-bold py-1 px-1.5 rounded shadow-md z-10 whitespace-nowrap leading-none">
+                                            {trend.count} {trend.count === 1 ? 'visit' : 'visits'}
+                                          </div>
+                                          
+                                          {/* Bar */}
+                                          <div className="w-full bg-indigo-100/50 group-hover:bg-indigo-100 rounded-lg h-full flex items-end overflow-hidden border border-indigo-200/20">
+                                            <div 
+                                              className="w-full bg-indigo-600 rounded-t-md transition-all duration-500 group-hover:bg-indigo-700"
+                                              style={{ height: `${pctHeight}%` }}
+                                            />
+                                          </div>
+                                          
+                                          {/* Date Label */}
+                                          <div className="text-center mt-2 w-full truncate">
+                                            <span className="block text-[9px] font-extrabold text-chocolate leading-none">
+                                              {formattedDay}
+                                            </span>
+                                            <span className="block text-[7px] text-chocolate/40 font-bold tracking-tight">
+                                              {formattedDate}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="h-32 flex items-center justify-center text-[11px] text-chocolate/40 italic">
+                                    No historical traffic tracked yet.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Device & Platform Breakdown */}
+                            <div className="lg:col-span-5 bg-cream/10 border border-chocolate/5 p-4 rounded-xl flex flex-col justify-between min-h-[220px]">
+                              <div>
+                                <div className="flex justify-between items-center pb-2 border-b border-chocolate/5">
+                                  <span className="text-[10px] font-black uppercase text-chocolate/60 tracking-wider">Device & Channels Distribution</span>
+                                  <span className="text-[9px] font-bold text-chocolate/40 font-mono">User Agent metrics</span>
+                                </div>
+
+                                <div className="space-y-4 pt-4">
+                                  {(() => {
+                                    const total = analyticsStats?.totalVisits || 1;
+                                    
+                                    const mobileCount = analyticsStats?.deviceStats?.find((d: any) => d.deviceType === 'mobile')?.count || 0;
+                                    const desktopCount = analyticsStats?.deviceStats?.find((d: any) => d.deviceType === 'desktop')?.count || 0;
+                                    const tabletCount = analyticsStats?.deviceStats?.find((d: any) => d.deviceType === 'tablet')?.count || 0;
+
+                                    const mobilePct = Math.round((mobileCount / total) * 100);
+                                    const desktopPct = Math.round((desktopCount / total) * 100);
+                                    const tabletPct = Math.round((tabletCount / total) * 100);
+
+                                    return (
+                                      <>
+                                        {/* Desktop row */}
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between text-[10px] font-black">
+                                            <span className="flex items-center gap-1.5 text-chocolate">
+                                              <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                                              Desktop Browsers
+                                            </span>
+                                            <span className="text-chocolate/60">{desktopCount} views ({desktopPct}%)</span>
+                                          </div>
+                                          <div className="h-1.5 w-full bg-beige/15 rounded-full overflow-hidden mt-1">
+                                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${desktopPct}%` }} />
+                                          </div>
+                                        </div>
+
+                                        {/* Mobile row */}
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between text-[10px] font-black">
+                                            <span className="flex items-center gap-1.5 text-chocolate">
+                                              <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+                                              Mobile Devices
+                                            </span>
+                                            <span className="text-chocolate/60">{mobileCount} views ({mobilePct}%)</span>
+                                          </div>
+                                          <div className="h-1.5 w-full bg-beige/15 rounded-full overflow-hidden mt-1">
+                                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${mobilePct}%` }} />
+                                          </div>
+                                        </div>
+
+                                        {/* Tablet row */}
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between text-[10px] font-black">
+                                            <span className="flex items-center gap-1.5 text-chocolate">
+                                              <Tablet className="w-3.5 h-3.5 text-indigo-600" />
+                                              Tablet Viewports
+                                            </span>
+                                            <span className="text-chocolate/60">{tabletCount} views ({tabletPct}%)</span>
+                                          </div>
+                                          <div className="h-1.5 w-full bg-beige/15 rounded-full overflow-hidden mt-1">
+                                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${tabletPct}%` }} />
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+
+                              <div className="text-[8px] text-chocolate/40 italic leading-none pt-4 border-t border-chocolate/5">
+                                *Traffic is gathered client-side and verified server-side with anti-spam IP headers.
+                              </div>
                             </div>
                           </div>
                         </div>

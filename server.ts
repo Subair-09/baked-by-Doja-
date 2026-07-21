@@ -232,6 +232,7 @@ const requireAdmin = (req: any, res: any, next: any) => {
 const fallbackUsers: any[] = [];
 const fallbackOrders: any[] = [];
 const fallbackInquiries: any[] = [];
+const fallbackVisits: any[] = [];
 const fallbackSettings: Record<string, string> = {
   paystack_public_key: process.env.PAYSTACK_PUBLIC_KEY || "",
   paystack_secret_key: process.env.PAYSTACK_SECRET_KEY || ""
@@ -513,6 +514,18 @@ async function initializeTables(dbPool: pg.Pool) {
         CREATE TABLE IF NOT EXISTS doja_gallery_categories (
           key VARCHAR(50) PRIMARY KEY,
           label VARCHAR(100) NOT NULL
+        );
+      `);
+
+      // Create visits table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS doja_visits (
+          id SERIAL PRIMARY KEY,
+          visitor_uuid VARCHAR(100) NOT NULL,
+          ip_address VARCHAR(100),
+          user_agent TEXT,
+          device_type VARCHAR(50),
+          visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
 
@@ -1419,6 +1432,136 @@ app.get("/api/settings/public", async (req, res) => {
       paystack_public_key: fallbackSettings['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
       facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
       facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || ''
+    });
+  }
+});
+
+// 5ff. Analytics & Visitor Traffic Endpoints (Admin Only for retrieval)
+app.post("/api/analytics/visit", async (req, res) => {
+  const { visitorUuid, deviceType } = req.body;
+  if (!visitorUuid) {
+    return res.status(400).json({ success: false, error: "visitorUuid is required" });
+  }
+
+  const ipAddress = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "").split(",")[0].trim();
+  const userAgent = req.headers["user-agent"] || "";
+
+  const dbPool = await getDbPool();
+  if (dbPool && tablesInitialized) {
+    try {
+      await dbPool.query(
+        "INSERT INTO doja_visits (visitor_uuid, ip_address, user_agent, device_type) VALUES ($1, $2, $3, $4)",
+        [visitorUuid, ipAddress, userAgent, deviceType || "desktop"]
+      );
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Database error while logging visit:", err);
+      return res.status(500).json({ error: "Failed to record visit" });
+    }
+  } else {
+    fallbackVisits.push({
+      visitor_uuid: visitorUuid,
+      ip_address: ipAddress,
+      user_agent: userAgent,
+      device_type: deviceType || "desktop",
+      visited_at: new Date()
+    });
+    return res.json({ success: true, message: "Visit recorded in memory fallback" });
+  }
+});
+
+app.get("/api/analytics/stats", requireAdmin, async (req, res) => {
+  const dbPool = await getDbPool();
+  if (dbPool && tablesInitialized) {
+    try {
+      const totalRes = await dbPool.query("SELECT COUNT(*) as count FROM doja_visits");
+      const uniqueRes = await dbPool.query("SELECT COUNT(DISTINCT visitor_uuid) as count FROM doja_visits");
+      const activeRes = await dbPool.query("SELECT COUNT(DISTINCT visitor_uuid) as count FROM doja_visits WHERE visited_at >= NOW() - INTERVAL '30 minutes'");
+      
+      const deviceRes = await dbPool.query("SELECT device_type as \"deviceType\", COUNT(*) as count FROM doja_visits GROUP BY device_type");
+      
+      // Get last 7 days of daily visits
+      const trendsRes = await dbPool.query(`
+        SELECT TO_CHAR(visited_at, 'YYYY-MM-DD') as date, COUNT(*) as count 
+        FROM doja_visits 
+        WHERE visited_at >= NOW() - INTERVAL '7 days' 
+        GROUP BY TO_CHAR(visited_at, 'YYYY-MM-DD') 
+        ORDER BY date ASC
+      `);
+
+      return res.json({
+        success: true,
+        stats: {
+          totalVisits: parseInt(totalRes.rows[0]?.count || "0", 10),
+          uniqueVisitors: parseInt(uniqueRes.rows[0]?.count || "0", 10),
+          activeVisitors: parseInt(activeRes.rows[0]?.count || "0", 10),
+          deviceStats: deviceRes.rows.map(r => ({
+            deviceType: r.deviceType || "desktop",
+            count: parseInt(r.count || "0", 10)
+          })),
+          dailyTrends: trendsRes.rows.map(r => ({
+            date: r.date,
+            count: parseInt(r.count || "0", 10)
+          }))
+        }
+      });
+    } catch (err: any) {
+      console.error("Database error fetching analytics stats:", err);
+      return res.status(500).json({ error: "Failed to fetch analytics statistics." });
+    }
+  } else {
+    // Memory fallback calculation
+    const totalVisits = fallbackVisits.length;
+    const uniqueVisitors = new Set(fallbackVisits.map(v => v.visitor_uuid)).size;
+    
+    const activeThreshold = Date.now() - 30 * 60 * 1000;
+    const activeVisitors = new Set(
+      fallbackVisits
+        .filter(v => new Date(v.visited_at).getTime() >= activeThreshold)
+        .map(v => v.visitor_uuid)
+    ).size;
+
+    // Device breakdown
+    const devicesMap: Record<string, number> = {};
+    fallbackVisits.forEach(v => {
+      const dev = v.device_type || "desktop";
+      devicesMap[dev] = (devicesMap[dev] || 0) + 1;
+    });
+    const deviceStats = Object.keys(devicesMap).map(key => ({
+      deviceType: key,
+      count: devicesMap[key]
+    }));
+
+    // Daily trends for last 7 days
+    const trendsMap: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      trendsMap[dateStr] = 0;
+    }
+
+    fallbackVisits.forEach(v => {
+      const dateStr = new Date(v.visited_at).toISOString().split('T')[0];
+      if (trendsMap[dateStr] !== undefined) {
+        trendsMap[dateStr]++;
+      }
+    });
+
+    const dailyTrends = Object.keys(trendsMap).map(key => ({
+      date: key,
+      count: trendsMap[key]
+    }));
+
+    return res.json({
+      success: true,
+      stats: {
+        totalVisits,
+        uniqueVisitors,
+        activeVisitors,
+        deviceStats,
+        dailyTrends
+      }
     });
   }
 });

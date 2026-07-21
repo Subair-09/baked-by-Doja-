@@ -120,6 +120,33 @@ export default function App() {
     loadGalleryFromServer();
     loadGalleryCategoriesFromServer();
     loadPublicKeysAndPixel();
+
+    // Record Visitor Analytics on mount
+    const recordVisit = async () => {
+      try {
+        let visitorUuid = localStorage.getItem('baked_by_doja_visitor_uuid');
+        if (!visitorUuid) {
+          visitorUuid = 'v_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('baked_by_doja_visitor_uuid', visitorUuid);
+        }
+        
+        let deviceType = 'desktop';
+        if (window.innerWidth < 640) {
+          deviceType = 'mobile';
+        } else if (window.innerWidth < 1024) {
+          deviceType = 'tablet';
+        }
+
+        await fetch('/api/analytics/visit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visitorUuid, deviceType })
+        });
+      } catch (err) {
+        console.warn("Analytics visit tracking error:", err);
+      }
+    };
+    recordVisit();
   }, []);
 
   const saveProducts = async (updated: Product[]) => {
