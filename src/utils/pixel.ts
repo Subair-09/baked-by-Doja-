@@ -237,3 +237,49 @@ export const trackPurchase = (orderId: string, totalAmount: number, cartItems: a
     });
   }
 };
+
+/**
+ * Dynamically injects and runs custom scripts (like Snapchat Base Code) provided by the administrator.
+ */
+export const injectCustomScripts = (htmlString: string) => {
+  if (!htmlString || typeof window === "undefined") return;
+
+  const containerId = "doja-custom-pixel-scripts";
+  let container = document.getElementById(containerId);
+  if (container) {
+    container.innerHTML = ""; // Clear out previous to avoid duplication
+  } else {
+    container = document.createElement("div");
+    container.id = containerId;
+    container.style.display = "none";
+    document.body.appendChild(container);
+  }
+
+  try {
+    // Parse HTML string
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, "text/html");
+    const scripts = Array.from(doc.querySelectorAll("script"));
+
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement("script");
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+      container!.appendChild(newScript);
+    });
+
+    // Also append any non-script nodes (e.g. noscript, style, etc.)
+    Array.from(doc.body.childNodes).forEach((node) => {
+      if (node.nodeName !== "SCRIPT") {
+        container!.appendChild(node.cloneNode(true));
+      }
+    });
+
+    console.log("[Custom Scripts] Dynamic Snapchat base code/custom script loaded and executed successfully.");
+  } catch (err) {
+    console.error("Failed to inject custom script:", err);
+  }
+};
+
