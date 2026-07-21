@@ -67,22 +67,23 @@ export const initSnapchatPixel = (pixelId: string) => {
   }
 
   /* eslint-disable */
-  (function (win: any, doc: any, sdk_url: any, a?: any) {
-    if (win.snaptr) return;
-    a = win.snaptr = function () {
+  (function (e: any, t: any, n: any, a?: any) {
+    if (e.snaptr) return;
+    a = e.snaptr = function () {
       a.handleRequest ? a.handleRequest.apply(a, arguments) : a.queue.push(arguments);
     };
     a.queue = [];
-    var s = doc.createElement(sdk_url);
-    s.async = !0;
-    s.src = "https://sc-static.net/sce/p1/bundle.js";
-    var r = doc.getElementsByTagName(sdk_url)[0];
-    r.parentNode.insertBefore(s, r);
-  })(window, document, "script");
+    var s = 'script';
+    var r = t.createElement(s);
+    r.async = !0;
+    r.src = n;
+    var u = t.getElementsByTagName(s)[0];
+    u.parentNode.insertBefore(r, u);
+  })(window, document, 'https://sc-static.net/scevent.min.js');
   /* eslint-enable */
 
   if (window.snaptr) {
-    window.snaptr("init", pixelId);
+    window.snaptr("init", pixelId, {});
     window.snaptr("track", "PAGE_VIEW");
     isSnapInitialized = true;
     console.log(`[Snapchat Pixel] Initialized successfully with ID: ${pixelId}`);
