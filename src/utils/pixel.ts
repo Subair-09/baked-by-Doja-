@@ -2,12 +2,17 @@ declare global {
   interface Window {
     fbq?: (...args: any[]) => void;
     _fbq?: any;
+    snaptr?: (...args: any[]) => void;
+    _snaptr?: any;
   }
 }
 
 let isPixelInitialized = false;
 let activePixelId = "";
 let activeConversionId = "";
+
+let isSnapInitialized = false;
+let activeSnapId = "";
 
 /**
  * Initializes the Meta (Facebook) Pixel with a given Pixel ID.
@@ -49,6 +54,41 @@ export const initFacebookPixel = (pixelId: string) => {
 };
 
 /**
+ * Initializes the Snapchat Pixel with a given Pixel ID.
+ */
+export const initSnapchatPixel = (pixelId: string) => {
+  if (!pixelId || typeof window === "undefined") return;
+
+  activeSnapId = pixelId;
+
+  if (isSnapInitialized) {
+    return;
+  }
+
+  /* eslint-disable */
+  (function (win: any, doc: any, sdk_url: any, a?: any) {
+    if (win.snaptr) return;
+    a = win.snaptr = function () {
+      a.handleRequest ? a.handleRequest.apply(a, arguments) : a.queue.push(arguments);
+    };
+    a.queue = [];
+    var s = doc.createElement(sdk_url);
+    s.async = !0;
+    s.src = "https://sc-static.net/sce/p1/bundle.js";
+    var r = doc.getElementsByTagName(sdk_url)[0];
+    r.parentNode.insertBefore(s, r);
+  })(window, document, "script");
+  /* eslint-enable */
+
+  if (window.snaptr) {
+    window.snaptr("init", pixelId);
+    window.snaptr("track", "PAGE_VIEW");
+    isSnapInitialized = true;
+    console.log(`[Snapchat Pixel] Initialized successfully with ID: ${pixelId}`);
+  }
+};
+
+/**
  * Sets the active Conversion ID used for Purchase tracking.
  */
 export const setFacebookConversionId = (conversionId: string) => {
@@ -74,9 +114,27 @@ export const trackPixelEvent = (eventName: string, options: Record<string, any> 
 };
 
 /**
- * Standard AddToCart tracker
+ * Tracks a Snapchat Pixel conversion event.
+ */
+export const trackSnapchatEvent = (eventName: string, options: Record<string, any> = {}) => {
+  if (typeof window === "undefined" || !isSnapInitialized || !window.snaptr) {
+    console.log(`[Snapchat Pixel Simulation] Event "${eventName}" not tracked (Pixel not initialized or ID not set).`, options);
+    return;
+  }
+
+  try {
+    window.snaptr("track", eventName, options);
+    console.log(`[Snapchat Pixel] Tracked Event: ${eventName}`, options);
+  } catch (err) {
+    console.error("[Snapchat Pixel] Failed to track event:", err);
+  }
+};
+
+/**
+ * Standard AddToCart tracker for both Meta and Snapchat Pixels
  */
 export const trackAddToCart = (productId: string, productName: string, price: number, currency = "NGN") => {
+  // Track Meta Pixel
   trackPixelEvent("AddToCart", {
     content_ids: [productId],
     content_name: productName,
@@ -84,13 +142,23 @@ export const trackAddToCart = (productId: string, productName: string, price: nu
     value: price,
     currency: currency,
   });
+
+  // Track Snapchat Pixel
+  trackSnapchatEvent("ADD_CART", {
+    price: price,
+    currency: currency,
+    item_ids: [productId],
+    item_category: "Baked Goods"
+  });
 };
 
 /**
- * Standard InitiateCheckout tracker
+ * Standard InitiateCheckout tracker for both Meta and Snapchat Pixels
  */
 export const trackInitiateCheckout = (cartItems: any[], totalValue: number, currency = "NGN") => {
   const contentIds = cartItems.map((item) => item.product.id || item.product._id);
+  
+  // Track Meta Pixel
   trackPixelEvent("InitiateCheckout", {
     content_ids: contentIds,
     content_type: "product",
@@ -98,10 +166,18 @@ export const trackInitiateCheckout = (cartItems: any[], totalValue: number, curr
     currency: currency,
     num_items: cartItems.length,
   });
+
+  // Track Snapchat Pixel
+  trackSnapchatEvent("START_CHECKOUT", {
+    price: totalValue,
+    currency: currency,
+    item_ids: contentIds,
+    number_items: cartItems.length
+  });
 };
 
 /**
- * Standard Purchase tracker with Conversion ID / Event ID
+ * Standard Purchase tracker with Conversion ID / Event ID for both Meta and Snapchat Pixels
  */
 export const trackPurchase = (orderId: string, totalAmount: number, cartItems: any[], currency = "NGN", conversionId?: string) => {
   const contentIds = cartItems.map((item) => item.product.id || item.product._id);
@@ -119,16 +195,24 @@ export const trackPurchase = (orderId: string, totalAmount: number, cartItems: a
     eventData.conversion_id = selectedConversionId;
   }
 
-  if (typeof window === "undefined" || !isPixelInitialized || !window.fbq) {
+  // Track Meta Pixel
+  if (typeof window !== "undefined" && isPixelInitialized && window.fbq) {
+    try {
+      window.fbq("track", "Purchase", eventData, { eventID: selectedConversionId });
+      console.log(`[Meta Pixel] Tracked Purchase with Event ID/Conversion ID: ${selectedConversionId}`, eventData);
+    } catch (err) {
+      console.error("[Meta Pixel] Failed to track Purchase:", err);
+    }
+  } else {
     console.log(`[Meta Pixel Simulation] Event "Purchase" not tracked (Pixel not initialized or ID not set).`, eventData);
-    return;
   }
 
-  try {
-    // Pass eventID inside options object or as the 4th argument (used for Conversions API matching)
-    window.fbq("track", "Purchase", eventData, { eventID: selectedConversionId });
-    console.log(`[Meta Pixel] Tracked Purchase with Event ID/Conversion ID: ${selectedConversionId}`, eventData);
-  } catch (err) {
-    console.error("[Meta Pixel] Failed to track Purchase:", err);
-  }
+  // Track Snapchat Pixel
+  trackSnapchatEvent("PURCHASE", {
+    price: totalAmount,
+    currency: currency,
+    item_ids: contentIds,
+    transaction_id: orderId,
+    number_items: cartItems.length
+  });
 };

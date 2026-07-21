@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
 import { products, gallery } from '../data';
 import { Product, GalleryItem } from '../types';
-import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase } from '../utils/pixel';
+import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase, initSnapchatPixel } from '../utils/pixel';
 
 interface UserDashboardProps {
   isOpen: boolean;
@@ -190,6 +190,7 @@ export default function UserDashboard({
   const [activePaystackPublicKey, setActivePaystackPublicKey] = useState('');
   const [activeFacebookPixelId, setActiveFacebookPixelId] = useState('');
   const [activeFacebookConversionId, setActiveFacebookConversionId] = useState('');
+  const [activeSnapchatPixelId, setActiveSnapchatPixelId] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -247,6 +248,7 @@ export default function UserDashboard({
   const [paystackSecretKey, setPaystackSecretKey] = useState('');
   const [facebookPixelId, setFacebookPixelId] = useState('');
   const [facebookConversionId, setFacebookConversionIdState] = useState('');
+  const [snapchatPixelId, setSnapchatPixelId] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -265,6 +267,7 @@ export default function UserDashboard({
         setPaystackSecretKey(data.paystack_secret_key || '');
         setFacebookPixelId(data.facebook_pixel_id || '');
         setFacebookConversionIdState(data.facebook_conversion_id || '');
+        setSnapchatPixelId(data.snapchat_pixel_id || '');
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
@@ -292,6 +295,7 @@ export default function UserDashboard({
           paystack_secret_key: paystackSecretKey,
           facebook_pixel_id: facebookPixelId,
           facebook_conversion_id: facebookConversionId,
+          snapchat_pixel_id: snapchatPixelId,
         }),
       });
       const data = await res.json();
@@ -300,11 +304,15 @@ export default function UserDashboard({
         setActivePaystackPublicKey(paystackPublicKey);
         setActiveFacebookPixelId(facebookPixelId);
         setActiveFacebookConversionId(facebookConversionId);
+        setActiveSnapchatPixelId(snapchatPixelId);
         if (facebookPixelId) {
           initFacebookPixel(facebookPixelId);
         }
         if (facebookConversionId) {
           setFacebookConversionId(facebookConversionId);
+        }
+        if (snapchatPixelId) {
+          initSnapchatPixel(snapchatPixelId);
         }
       } else {
         setSettingsMessage({ type: 'error', text: 'Failed to save settings: ' + data.error });
@@ -483,6 +491,10 @@ export default function UserDashboard({
         if (data.facebook_conversion_id) {
           setActiveFacebookConversionId(data.facebook_conversion_id);
           setFacebookConversionId(data.facebook_conversion_id);
+        }
+        if (data.snapchat_pixel_id) {
+          setActiveSnapchatPixelId(data.snapchat_pixel_id);
+          initSnapchatPixel(data.snapchat_pixel_id);
         }
       }
     } catch (err) {
@@ -4526,6 +4538,22 @@ export default function UserDashboard({
                             />
                             <span className="block text-[9px] text-chocolate/40 leading-normal">
                               Optional. Enter a custom Purchase Event/Conversion ID to optimize tracking or link with Conversions API deduplication.
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
+                              Snapchat Pixel ID
+                            </label>
+                            <input
+                              type="text"
+                              value={snapchatPixelId}
+                              onChange={e => setSnapchatPixelId(e.target.value)}
+                              placeholder="e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal">
+                              Enter your Snapchat Pixel ID (standard UUID format) to track conversions, add-to-carts, and checkouts from Snapchat campaigns.
                             </span>
                           </div>
 
