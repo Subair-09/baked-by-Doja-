@@ -197,6 +197,9 @@ export default function UserDashboard({
   const [transferSenderName, setTransferSenderName] = useState('');
   const [isPaying, setIsPaying] = useState(false);
   const [paymentStepText, setPaymentStepText] = useState('');
+  const [pendingPaymentReference, setPendingPaymentReference] = useState<string | null>(null);
+  const [pendingPaymentOrderId, setPendingPaymentOrderId] = useState<string | null>(null);
+  const [pendingPaymentOrderData, setPendingPaymentOrderData] = useState<any | null>(null);
 
   // Reviews list and active state
   const [reviewOrderId, setReviewOrderId] = useState<string>('');
@@ -592,6 +595,39 @@ export default function UserDashboard({
       window.removeEventListener('pageshow', handlePageShow);
     };
   }, [isOpen]);
+
+  // Background auto-polling of active pending Paystack payments
+  useEffect(() => {
+    if (!isPaying || !pendingPaymentReference || !pendingPaymentOrderId) {
+      return;
+    }
+
+    let isSubmitting = false;
+    const intervalId = setInterval(async () => {
+      if (isSubmitting) return;
+      isSubmitting = true;
+
+      try {
+        const phoneParam = checkoutPhone || (currentUser ? currentUser.phone : '');
+        const verifyRes = await fetch(`/api/payments/verify/${pendingPaymentReference}?orderId=${pendingPaymentOrderId}&phone=${encodeURIComponent(phoneParam)}`);
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json();
+          if (verifyData.success) {
+            clearInterval(intervalId);
+            await completeOrderFlow(pendingPaymentOrderId, pendingPaymentOrderData || verifyData.orderData);
+          }
+        }
+      } catch (err) {
+        console.warn("Background payment verification poll error:", err);
+      } finally {
+        isSubmitting = false;
+      }
+    }, 4000); // Poll every 4 seconds
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isPaying, pendingPaymentReference, pendingPaymentOrderId, pendingPaymentOrderData, currentUser, checkoutPhone]);
 
   // ================= ADMIN BUSINESS LOGIC =================
   useEffect(() => {
@@ -1534,9 +1570,16 @@ export default function UserDashboard({
 
       const initData = await initRes.json();
       if (initData.success && initData.authorization_url) {
-        setPaymentStepText("Redirecting to Paystack secure checkout...");
-        // Redirect current frame to Paystack
-        window.location.href = initData.authorization_url;
+        setPendingPaymentReference(initData.reference || orderId);
+        setPendingPaymentOrderId(orderId);
+        setPendingPaymentOrderData(orderData);
+        
+        setPaymentStepText("A secure checkout tab has been opened for you.");
+        
+        // Open Paystack in a new window/tab
+        window.open(initData.authorization_url, '_blank');
+        
+        setPaymentStepText("Waiting for payment confirmation from Paystack...");
       } else {
         throw new Error(initData.message || "Failed to initialize secure payment session.");
       }
@@ -1544,7 +1587,40 @@ export default function UserDashboard({
       console.error("Paystack initialization error:", err);
       triggerToast(err.message || "Paystack secure portal took too long to load. Please verify your connection.", "error");
       setIsPaying(false);
+      setPendingPaymentReference(null);
+      setPendingPaymentOrderId(null);
+      setPendingPaymentOrderData(null);
     }
+  };
+
+  const handleManualPaymentVerification = async () => {
+    if (!pendingPaymentReference || !pendingPaymentOrderId) return;
+    
+    setPaymentStepText("Checking verification status with Paystack...");
+    try {
+      const phoneParam = checkoutPhone || (currentUser ? currentUser.phone : '');
+      const verifyRes = await fetch(`/api/payments/verify/${pendingPaymentReference}?orderId=${pendingPaymentOrderId}&phone=${encodeURIComponent(phoneParam)}`);
+      const verifyData = await verifyRes.json();
+      if (verifyData.success) {
+        await completeOrderFlow(pendingPaymentOrderId, pendingPaymentOrderData || verifyData.orderData);
+      } else {
+        triggerToast(verifyData.message || "Your payment is still pending. Please complete it on the opened Paystack screen.", "info");
+        setPaymentStepText("Waiting for payment confirmation from Paystack...");
+      }
+    } catch (err) {
+      console.error("Manual verification error:", err);
+      triggerToast("Unable to reach Paystack verification server right now. Please try again in a few moments.", "error");
+      setPaymentStepText("Waiting for payment confirmation from Paystack...");
+    }
+  };
+
+  const handleCancelPayment = () => {
+    setIsPaying(false);
+    setPendingPaymentReference(null);
+    setPendingPaymentOrderId(null);
+    setPendingPaymentOrderData(null);
+    setPaymentStepText("");
+    triggerToast("Payment session cancelled. You can try checkout again when ready.", "info");
   };
 
   const completeOrderFlow = async (orderId: string, orderData: any) => {
@@ -2539,58 +2615,112 @@ export default function UserDashboard({
                       </div>
 
                       {paymentMethod === 'paystack' ? (
-                        /* PAYSTACK RENDER */
-                        <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
-                          <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-800 shrink-0">
-                              <ShieldCheck className="w-5 h-5" />
+                        isPaying && pendingPaymentReference ? (
+                          /* PAYSTACK PENDING ACTIVE CHECKOUT RENDER */
+                          <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
+                            <div className="flex items-start gap-4">
+                              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-amber-800 shrink-0">
+                                <Clock className="w-5 h-5 animate-pulse" />
+                              </div>
+                              <div className="space-y-1">
+                                <h4 className="font-serif font-black text-chocolate text-sm">🔒 Paystack Payment Window Active</h4>
+                                <p className="text-[11px] text-chocolate/60 leading-normal">
+                                  We have opened Paystack's secure checkout gateway in a new tab. Please finalize your transaction on that page. Do not close this screen.
+                                </p>
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <h4 className="font-serif font-black text-chocolate text-sm">Paystack Secure Checkout</h4>
-                              <p className="text-[11px] text-chocolate/60 leading-normal">
-                                Your order is verified and ready. Complete your banana bread purchase using Paystack's secure checkout portal. Pay safely with your Card, USSD, or Bank App.
+
+                            <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3 shadow-sm">
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className="text-chocolate/50 font-black uppercase">Oven Queue Tracking ID</span>
+                                <span className="bg-amber-100 text-amber-950 font-mono font-extrabold px-2 py-0.5 rounded-md">
+                                  {pendingPaymentOrderId}
+                                </span>
+                              </div>
+                              
+                              <p className="text-[10px] text-chocolate/50 leading-normal">
+                                Once your card, USSD, or transfer payment is approved on the Paystack tab, this screen will automatically refresh and move to your order tracking portal.
                               </p>
                             </div>
-                          </div>
 
-                          <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3 shadow-sm">
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-chocolate/50 font-black uppercase">Authentication Gate</span>
-                              {activePaystackPublicKey ? (
-                                <span className="bg-emerald-100 text-emerald-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                                  ACTIVE SECURE GATE
-                                </span>
-                              ) : (
-                                <span className="bg-amber-100 text-amber-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                                  PENDING GATEWAY SETUP
-                                </span>
-                              )}
+                            <div className="flex flex-col gap-2 pt-1">
+                              <button
+                                onClick={handleManualPaymentVerification}
+                                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Check className="w-4 h-4" />
+                                Verify My Payment
+                              </button>
+                              
+                              <button
+                                onClick={handleCancelPayment}
+                                className="w-full bg-chocolate/10 hover:bg-chocolate/15 text-chocolate font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                                Cancel & Stop Payment
+                              </button>
                             </div>
-                            
-                            <p className="text-[10px] text-chocolate/50 leading-normal">
-                              {activePaystackPublicKey 
-                                ? "Your checkout executes securely via Paystack API with full cryptographic verification."
-                                : "Please ensure the administrator has saved your Paystack keys in the settings dashboard to initiate real transactions."
-                              }
-                            </p>
-                          </div>
 
-                          <div className="pt-2 text-center">
-                            <button
-                              onClick={handlePaystackPayment}
-                              disabled={isPaying}
-                              className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <CreditCard className="w-4 h-4 text-banana animate-bounce" />
-                              {isPaying ? "Opening Paystack Gateway..." : "Launch Paystack Checkout"}
-                            </button>
-                            <span className="block text-[9px] text-chocolate/40 mt-2 leading-relaxed">
-                              Secured by Paystack Inline. Faridah's bakery never logs your payment credentials.
-                            </span>
+                            <div className="text-center">
+                              <span className="inline-block text-[9px] text-chocolate/40 mt-1 leading-relaxed">
+                                Chef Faridah's system is waiting for your transaction confirmation.
+                              </span>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          /* DEFAULT PAYSTACK LAUNCH RENDER */
+                          <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
+                            <div className="flex items-start gap-4">
+                              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-800 shrink-0">
+                                <ShieldCheck className="w-5 h-5" />
+                              </div>
+                              <div className="space-y-1">
+                                <h4 className="font-serif font-black text-chocolate text-sm">Paystack Secure Checkout</h4>
+                                <p className="text-[11px] text-chocolate/60 leading-normal">
+                                  Your order is verified and ready. Complete your banana bread purchase using Paystack's secure checkout portal. Pay safely with your Card, USSD, or Bank App.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-4.5 rounded-xl border border-chocolate/5 space-y-3 shadow-sm">
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className="text-chocolate/50 font-black uppercase">Authentication Gate</span>
+                                {activePaystackPublicKey ? (
+                                  <span className="bg-emerald-100 text-emerald-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                    ACTIVE SECURE GATE
+                                  </span>
+                                ) : (
+                                  <span className="bg-amber-100 text-amber-950 font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 font-mono text-[9px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                                    PENDING GATEWAY SETUP
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <p className="text-[10px] text-chocolate/50 leading-normal">
+                                {activePaystackPublicKey 
+                                  ? "Your checkout executes securely via Paystack API with full cryptographic verification."
+                                  : "Please ensure the administrator has saved your Paystack keys in the settings dashboard to initiate real transactions."
+                                }
+                              </p>
+                            </div>
+
+                            <div className="pt-2 text-center">
+                              <button
+                                onClick={handlePaystackPayment}
+                                disabled={isPaying}
+                                className="w-full bg-chocolate hover:bg-chocolate/90 text-white font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <CreditCard className="w-4 h-4 text-banana animate-bounce" />
+                                {isPaying ? "Opening Paystack Gateway..." : "Launch Paystack Checkout"}
+                              </button>
+                              <span className="block text-[9px] text-chocolate/40 mt-2 leading-relaxed">
+                                Secured by Paystack Inline. Faridah's bakery never logs your payment credentials.
+                              </span>
+                            </div>
+                          </div>
+                        )
                       ) : (
                         /* BANK TRANSFER RENDER */
                         <div className="bg-beige/10 border border-chocolate/5 rounded-2xl p-6 space-y-6 text-xs text-left relative overflow-hidden">
@@ -2684,7 +2814,7 @@ export default function UserDashboard({
                             <p className="text-[11px] font-bold text-banana animate-pulse">{paymentStepText}</p>
                             <button
                               type="button"
-                              onClick={() => setIsPaying(false)}
+                              onClick={pendingPaymentReference ? handleCancelPayment : () => setIsPaying(false)}
                               className="text-[9px] bg-white/10 hover:bg-white/15 text-banana px-3 py-1.5 rounded-lg font-extrabold uppercase tracking-widest mt-1 cursor-pointer transition-colors"
                             >
                               Cancel & Return
