@@ -1334,7 +1334,7 @@ async function updateOrderPayment(orderId: string, paymentStatus: string, refere
 
 // 5d. Save Paystack Settings (Admin Only)
 app.post("/api/settings", requireAdmin, async (req, res) => {
-  const { paystack_public_key, paystack_secret_key, facebook_pixel_id, facebook_conversion_id, snapchat_pixel_id } = req.body;
+  const { paystack_public_key, paystack_secret_key, facebook_pixel_id, facebook_conversion_id, snapchat_pixel_id, snapchat_custom_event_name } = req.body;
 
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
@@ -1364,6 +1364,11 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
          ON CONFLICT (key) DO UPDATE SET value = $1`,
         [snapchat_pixel_id || '']
       );
+      await dbPool.query(
+        `INSERT INTO doja_settings (key, value) VALUES ('snapchat_custom_event_name', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [snapchat_custom_event_name || '']
+      );
       return res.json({ success: true, message: "Settings saved successfully." });
     } catch (err: any) {
       console.error("Database settings insert error:", err);
@@ -1376,6 +1381,7 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
     fallbackSettings['facebook_pixel_id'] = facebook_pixel_id || '';
     fallbackSettings['facebook_conversion_id'] = facebook_conversion_id || '';
     fallbackSettings['snapchat_pixel_id'] = snapchat_pixel_id || '';
+    fallbackSettings['snapchat_custom_event_name'] = snapchat_custom_event_name || '';
     return res.json({ success: true, message: "Settings saved to in-memory fallback store." });
   }
 });
@@ -1396,7 +1402,8 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
         paystack_secret_key: settingsMap['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || '',
         facebook_pixel_id: settingsMap['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
         facebook_conversion_id: settingsMap['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
-        snapchat_pixel_id: settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || ''
+        snapchat_pixel_id: settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
+        snapchat_custom_event_name: settingsMap['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
       });
     } catch (err: any) {
       console.error("Database settings query error:", err);
@@ -1409,7 +1416,8 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
       paystack_secret_key: fallbackSettings['paystack_secret_key'] || process.env.PAYSTACK_SECRET_KEY || '',
       facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
       facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
-      snapchat_pixel_id: fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || ''
+      snapchat_pixel_id: fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
+      snapchat_custom_event_name: fallbackSettings['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
     });
   }
 });
@@ -1419,7 +1427,7 @@ app.get("/api/settings/public", async (req, res) => {
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
     try {
-      const result = await dbPool.query("SELECT key, value FROM doja_settings WHERE key IN ('paystack_public_key', 'facebook_pixel_id', 'facebook_conversion_id', 'snapchat_pixel_id')");
+      const result = await dbPool.query("SELECT key, value FROM doja_settings WHERE key IN ('paystack_public_key', 'facebook_pixel_id', 'facebook_conversion_id', 'snapchat_pixel_id', 'snapchat_custom_event_name')");
       const settingsMap: Record<string, string> = {};
       result.rows.forEach(row => {
         settingsMap[row.key] = row.value;
@@ -1429,7 +1437,8 @@ app.get("/api/settings/public", async (req, res) => {
         paystack_public_key: settingsMap['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
         facebook_pixel_id: settingsMap['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
         facebook_conversion_id: settingsMap['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
-        snapchat_pixel_id: settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || ''
+        snapchat_pixel_id: settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
+        snapchat_custom_event_name: settingsMap['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
       });
     } catch (err: any) {
       console.error("Database settings query error:", err);
@@ -1441,7 +1450,8 @@ app.get("/api/settings/public", async (req, res) => {
       paystack_public_key: fallbackSettings['paystack_public_key'] || process.env.PAYSTACK_PUBLIC_KEY || '',
       facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
       facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
-      snapchat_pixel_id: fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || ''
+      snapchat_pixel_id: fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
+      snapchat_custom_event_name: fallbackSettings['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
     });
   }
 });

@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
 import { products, gallery } from '../data';
 import { Product, GalleryItem } from '../types';
-import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase, initSnapchatPixel } from '../utils/pixel';
+import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase, initSnapchatPixel, setSnapchatCustomEventName } from '../utils/pixel';
 
 interface UserDashboardProps {
   isOpen: boolean;
@@ -191,6 +191,7 @@ export default function UserDashboard({
   const [activeFacebookPixelId, setActiveFacebookPixelId] = useState('');
   const [activeFacebookConversionId, setActiveFacebookConversionId] = useState('');
   const [activeSnapchatPixelId, setActiveSnapchatPixelId] = useState('');
+  const [activeSnapchatCustomEventName, setActiveSnapchatCustomEventName] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -249,6 +250,7 @@ export default function UserDashboard({
   const [facebookPixelId, setFacebookPixelId] = useState('');
   const [facebookConversionId, setFacebookConversionIdState] = useState('');
   const [snapchatPixelId, setSnapchatPixelId] = useState('');
+  const [snapchatCustomEventName, setSnapchatCustomEventNameState] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -268,6 +270,7 @@ export default function UserDashboard({
         setFacebookPixelId(data.facebook_pixel_id || '');
         setFacebookConversionIdState(data.facebook_conversion_id || '');
         setSnapchatPixelId(data.snapchat_pixel_id || '');
+        setSnapchatCustomEventNameState(data.snapchat_custom_event_name || '');
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
@@ -296,6 +299,7 @@ export default function UserDashboard({
           facebook_pixel_id: facebookPixelId,
           facebook_conversion_id: facebookConversionId,
           snapchat_pixel_id: snapchatPixelId,
+          snapchat_custom_event_name: snapchatCustomEventName,
         }),
       });
       const data = await res.json();
@@ -305,6 +309,7 @@ export default function UserDashboard({
         setActiveFacebookPixelId(facebookPixelId);
         setActiveFacebookConversionId(facebookConversionId);
         setActiveSnapchatPixelId(snapchatPixelId);
+        setActiveSnapchatCustomEventName(snapchatCustomEventName);
         if (facebookPixelId) {
           initFacebookPixel(facebookPixelId);
         }
@@ -313,6 +318,9 @@ export default function UserDashboard({
         }
         if (snapchatPixelId) {
           initSnapchatPixel(snapchatPixelId);
+        }
+        if (snapchatCustomEventName) {
+          setSnapchatCustomEventName(snapchatCustomEventName);
         }
       } else {
         setSettingsMessage({ type: 'error', text: 'Failed to save settings: ' + data.error });
@@ -495,6 +503,10 @@ export default function UserDashboard({
         if (data.snapchat_pixel_id) {
           setActiveSnapchatPixelId(data.snapchat_pixel_id);
           initSnapchatPixel(data.snapchat_pixel_id);
+        }
+        if (data.snapchat_custom_event_name) {
+          setActiveSnapchatCustomEventName(data.snapchat_custom_event_name);
+          setSnapchatCustomEventName(data.snapchat_custom_event_name);
         }
       }
     } catch (err) {
@@ -4554,6 +4566,22 @@ export default function UserDashboard({
                             />
                             <span className="block text-[9px] text-chocolate/40 leading-normal">
                               Enter your Snapchat Pixel ID (standard UUID format) to track conversions, add-to-carts, and checkouts from Snapchat campaigns.
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
+                              Snapchat Custom Event Name
+                            </label>
+                            <input
+                              type="text"
+                              value={snapchatCustomEventName}
+                              onChange={e => setSnapchatCustomEventNameState(e.target.value)}
+                              placeholder="e.g. CUSTOM_CONVERSION"
+                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal">
+                              Optional. Enter a custom conversion event name to fire alongside the standard Snapchat PURCHASE event (e.g. CUSTOM_CONVERSION_1).
                             </span>
                           </div>
 

@@ -15,7 +15,7 @@ import UserDashboard from './components/UserDashboard';
 import FloatingWhatsApp from './components/FloatingWhatsApp';
 import { Product, GalleryItem } from './types';
 import { products as defaultProducts, gallery as defaultGallery } from './data';
-import { initFacebookPixel, setFacebookConversionId, initSnapchatPixel } from './utils/pixel';
+import { initFacebookPixel, setFacebookConversionId, initSnapchatPixel, setSnapchatCustomEventName } from './utils/pixel';
 
 export default function App() {
   const [activeProducts, setActiveProducts] = useState<Product[]>(() => {
@@ -112,6 +112,9 @@ export default function App() {
             }
             if (data.snapchat_pixel_id) {
               initSnapchatPixel(data.snapchat_pixel_id);
+            }
+            if (data.snapchat_custom_event_name) {
+              setSnapchatCustomEventName(data.snapchat_custom_event_name);
             }
           }
         }

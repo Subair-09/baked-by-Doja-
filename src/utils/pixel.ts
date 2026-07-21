@@ -13,6 +13,7 @@ let activeConversionId = "";
 
 let isSnapInitialized = false;
 let activeSnapId = "";
+let activeSnapCustomEventName = "";
 
 /**
  * Initializes the Meta (Facebook) Pixel with a given Pixel ID.
@@ -94,6 +95,14 @@ export const initSnapchatPixel = (pixelId: string) => {
 export const setFacebookConversionId = (conversionId: string) => {
   activeConversionId = conversionId;
   console.log(`[Meta Pixel] Active Conversion ID / Event ID set to: ${conversionId}`);
+};
+
+/**
+ * Sets the active Snapchat Custom Event Name used for dynamic custom conversion tracking.
+ */
+export const setSnapchatCustomEventName = (eventName: string) => {
+  activeSnapCustomEventName = eventName;
+  console.log(`[Snapchat Pixel] Active Custom Event Name set to: ${eventName}`);
 };
 
 /**
@@ -215,4 +224,15 @@ export const trackPurchase = (orderId: string, totalAmount: number, cartItems: a
     transaction_id: orderId,
     number_items: cartItems.length
   });
+
+  // Track Dynamic Snapchat Custom Conversion Event if defined
+  if (activeSnapCustomEventName) {
+    trackSnapchatEvent(activeSnapCustomEventName, {
+      price: totalAmount,
+      currency: currency,
+      item_ids: contentIds,
+      transaction_id: orderId,
+      number_items: cartItems.length
+    });
+  }
 };
