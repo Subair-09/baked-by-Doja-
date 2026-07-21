@@ -14,9 +14,9 @@ import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitia
 interface UserDashboardProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: { name: string; phone: string; role?: string; token?: string } | null;
+  currentUser: { name: string; phone: string; email?: string; role?: string; token?: string } | null;
   onOrderNowClick: (productTitle?: string) => void;
-  onAuthSuccess?: (user: { name: string; phone: string; role?: string; token?: string }) => void;
+  onAuthSuccess?: (user: { name: string; phone: string; email?: string; role?: string; token?: string }) => void;
   editProductOnLoad?: Product | null;
   onResetEditProductOnLoad?: () => void;
   products?: Product[];
@@ -251,6 +251,7 @@ export default function UserDashboard({
   const [facebookConversionId, setFacebookConversionIdState] = useState('');
   const [snapchatPixelId, setSnapchatPixelId] = useState('');
   const [snapchatCustomEventName, setSnapchatCustomEventNameState] = useState('');
+  const [snapchatAccessToken, setSnapchatAccessToken] = useState('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -271,6 +272,7 @@ export default function UserDashboard({
         setFacebookConversionIdState(data.facebook_conversion_id || '');
         setSnapchatPixelId(data.snapchat_pixel_id || '');
         setSnapchatCustomEventNameState(data.snapchat_custom_event_name || '');
+        setSnapchatAccessToken(data.snapchat_access_token || '');
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
@@ -300,6 +302,7 @@ export default function UserDashboard({
           facebook_conversion_id: facebookConversionId,
           snapchat_pixel_id: snapchatPixelId,
           snapchat_custom_event_name: snapchatCustomEventName,
+          snapchat_access_token: snapchatAccessToken,
         }),
       });
       const data = await res.json();
@@ -1566,6 +1569,7 @@ export default function UserDashboard({
       orderId,
       customerName: checkoutName || currentUser.name,
       customerPhone: checkoutPhone || currentUser.phone,
+      customerEmail: currentUser.email || `${(checkoutPhone || currentUser.phone).replace(/[^a-zA-Z0-9]/g, '') || 'guest'}@bakedbydoja.com`,
       productTitle: consolidatedTitle,
       quantity: cartItems.reduce((acc, c) => acc + c.quantity, 0),
       topping: cartItems[0]?.topping || 'Classic Plain',
@@ -4566,6 +4570,22 @@ export default function UserDashboard({
                             />
                             <span className="block text-[9px] text-chocolate/40 leading-normal">
                               Enter your Snapchat Pixel ID (standard UUID format) to track conversions, add-to-carts, and checkouts from Snapchat campaigns.
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
+                              Snapchat Conversions API Access Token
+                            </label>
+                            <input
+                              type="password"
+                              value={snapchatAccessToken}
+                              onChange={e => setSnapchatAccessToken(e.target.value)}
+                              placeholder="Enter your Snapchat Conversions API access token..."
+                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                            />
+                            <span className="block text-[9px] text-chocolate/40 leading-normal">
+                              Optional. Paste your Snapchat Conversions API access token here. This enables secure, server-side purchase tracking to recover missed web browser conversions.
                             </span>
                           </div>
 

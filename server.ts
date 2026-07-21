@@ -1334,7 +1334,7 @@ async function updateOrderPayment(orderId: string, paymentStatus: string, refere
 
 // 5d. Save Paystack Settings (Admin Only)
 app.post("/api/settings", requireAdmin, async (req, res) => {
-  const { paystack_public_key, paystack_secret_key, facebook_pixel_id, facebook_conversion_id, snapchat_pixel_id, snapchat_custom_event_name } = req.body;
+  const { paystack_public_key, paystack_secret_key, facebook_pixel_id, facebook_conversion_id, snapchat_pixel_id, snapchat_custom_event_name, snapchat_access_token } = req.body;
 
   const dbPool = await getDbPool();
   if (dbPool && tablesInitialized) {
@@ -1369,6 +1369,11 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
          ON CONFLICT (key) DO UPDATE SET value = $1`,
         [snapchat_custom_event_name || '']
       );
+      await dbPool.query(
+        `INSERT INTO doja_settings (key, value) VALUES ('snapchat_access_token', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [snapchat_access_token || '']
+      );
       return res.json({ success: true, message: "Settings saved successfully." });
     } catch (err: any) {
       console.error("Database settings insert error:", err);
@@ -1382,6 +1387,7 @@ app.post("/api/settings", requireAdmin, async (req, res) => {
     fallbackSettings['facebook_conversion_id'] = facebook_conversion_id || '';
     fallbackSettings['snapchat_pixel_id'] = snapchat_pixel_id || '';
     fallbackSettings['snapchat_custom_event_name'] = snapchat_custom_event_name || '';
+    fallbackSettings['snapchat_access_token'] = snapchat_access_token || '';
     return res.json({ success: true, message: "Settings saved to in-memory fallback store." });
   }
 });
@@ -1403,7 +1409,8 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
         facebook_pixel_id: settingsMap['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
         facebook_conversion_id: settingsMap['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
         snapchat_pixel_id: settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
-        snapchat_custom_event_name: settingsMap['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
+        snapchat_custom_event_name: settingsMap['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || '',
+        snapchat_access_token: settingsMap['snapchat_access_token'] || process.env.SNAPCHAT_ACCESS_TOKEN || ''
       });
     } catch (err: any) {
       console.error("Database settings query error:", err);
@@ -1417,7 +1424,8 @@ app.get("/api/settings", requireAdmin, async (req, res) => {
       facebook_pixel_id: fallbackSettings['facebook_pixel_id'] || process.env.VITE_FACEBOOK_PIXEL_ID || '',
       facebook_conversion_id: fallbackSettings['facebook_conversion_id'] || process.env.VITE_FACEBOOK_CONVERSION_ID || '',
       snapchat_pixel_id: fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '',
-      snapchat_custom_event_name: fallbackSettings['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || ''
+      snapchat_custom_event_name: fallbackSettings['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || '',
+      snapchat_access_token: fallbackSettings['snapchat_access_token'] || process.env.SNAPCHAT_ACCESS_TOKEN || ''
     });
   }
 });
@@ -1701,6 +1709,120 @@ const ensureAuditTable = async (client: any) => {
   `);
 };
 
+// Helper function to retrieve Snapchat credentials and settings dynamically
+async function getSnapchatSettings() {
+  const dbPool = await getDbPool();
+  let pixelId = "";
+  let accessToken = "";
+  let customEventName = "";
+
+  if (dbPool && tablesInitialized) {
+    try {
+      const result = await dbPool.query(
+        "SELECT key, value FROM doja_settings WHERE key IN ('snapchat_pixel_id', 'snapchat_access_token', 'snapchat_custom_event_name')"
+      );
+      const settingsMap: Record<string, string> = {};
+      result.rows.forEach(row => {
+        settingsMap[row.key] = row.value;
+      });
+      pixelId = settingsMap['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '';
+      accessToken = settingsMap['snapchat_access_token'] || process.env.SNAPCHAT_ACCESS_TOKEN || '';
+      customEventName = settingsMap['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || '';
+    } catch (err) {
+      console.error("Error fetching Snapchat settings from DB:", err);
+    }
+  } else {
+    pixelId = fallbackSettings['snapchat_pixel_id'] || process.env.VITE_SNAPCHAT_PIXEL_ID || '';
+    accessToken = fallbackSettings['snapchat_access_token'] || process.env.SNAPCHAT_ACCESS_TOKEN || '';
+    customEventName = fallbackSettings['snapchat_custom_event_name'] || process.env.VITE_SNAPCHAT_CUSTOM_EVENT_NAME || '';
+  }
+
+  return { pixelId, accessToken, customEventName };
+}
+
+// Trigger Snapchat server-side Conversions API event
+async function sendSnapchatConversionEvent(orderData: any, reference: string, clientIp?: string) {
+  try {
+    const { pixelId, accessToken, customEventName } = await getSnapchatSettings();
+    if (!pixelId || !accessToken) {
+      console.log("[Snapchat CAPI] Skipping server-side tracking: Pixel ID or Access Token is not configured.");
+      return;
+    }
+
+    console.log(`[Snapchat CAPI] Triggering server-side event tracking for Pixel ID: ${pixelId}`);
+
+    // Standardize user data using SHA-256
+    const sha256 = (str: string) => crypto.createHash("sha256").update(str.trim().toLowerCase()).digest("hex");
+
+    const phone = orderData?.customerPhone || "";
+    const email = orderData?.customerEmail || "";
+
+    const user_data: Record<string, any> = {};
+    if (email) {
+      user_data.hashed_email = sha256(email);
+    }
+    if (phone) {
+      const cleanPhone = phone.replace(/[^0-9+]/g, "");
+      user_data.hashed_phone_number = sha256(cleanPhone);
+    }
+    if (clientIp && clientIp !== "unknown") {
+      user_data.hashed_ip_address = sha256(clientIp);
+    }
+
+    const price = orderData?.totalAmount || 0;
+    const qty = orderData?.quantity || 1;
+
+    const events: any[] = [];
+
+    // 1. Standard PURCHASE event
+    const purchaseEvent: any = {
+      event_type: "PURCHASE",
+      event_conversion_type: "WEB",
+      event_time: Date.now(), // epoch in milliseconds
+      price: Number(price),
+      currency: "NGN",
+      transaction_id: reference || orderData?.orderId || "unknown",
+      number_items: Number(qty)
+    };
+
+    // Attach hashed user identity parameters
+    Object.assign(purchaseEvent, user_data);
+    events.push(purchaseEvent);
+
+    // 2. Custom event (if configured)
+    if (customEventName) {
+      const customEvent: any = {
+        event_type: customEventName,
+        event_conversion_type: "WEB",
+        event_time: Date.now(),
+        price: Number(price),
+        currency: "NGN",
+        transaction_id: reference || orderData?.orderId || "unknown",
+        number_items: Number(qty)
+      };
+      Object.assign(customEvent, user_data);
+      events.push(customEvent);
+    }
+
+    const payload = { events };
+
+    console.log(`[Snapchat CAPI] Sending payload to https://tr.snapchat.com/v3/${pixelId}/events`);
+
+    const response = await fetch(`https://tr.snapchat.com/v3/${pixelId}/events?access_token=${accessToken}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const resData: any = await response.json();
+    console.log("[Snapchat CAPI] API Response:", JSON.stringify(resData));
+  } catch (err: any) {
+    console.error("❌ [Snapchat CAPI] Error sending conversion event:", err.message || err);
+  }
+}
+
 // Unified helper to save/process verified orders securely inside a transaction
 const processVerifiedPayment = async (reference: string, amount: number, rawData: any, orderId?: string, clientIp?: string, requestingPhone?: string) => {
   const dbPool = await getDbPool();
@@ -1814,6 +1936,11 @@ const processVerifiedPayment = async (reference: string, amount: number, rawData
       );
 
       await client.query("COMMIT");
+      if (orderData) {
+        sendSnapchatConversionEvent(orderData, reference, clientIp).catch(err => {
+          console.error("Error sending Snapchat CAPI event (DB path):", err);
+        });
+      }
       return { success: true, isIdempotent: false, orderData };
     } catch (txErr) {
       await client.query("ROLLBACK");
@@ -1857,6 +1984,11 @@ const processVerifiedPayment = async (reference: string, amount: number, rawData
       });
     }
     console.log(`Processed paid order ${derivedOrderId} in fallback memory.`);
+    if (orderData) {
+      sendSnapchatConversionEvent(orderData, reference, clientIp).catch(err => {
+        console.error("Error sending Snapchat CAPI event (fallback path):", err);
+      });
+    }
     return { success: true, isIdempotent: false, orderData };
   }
 };
