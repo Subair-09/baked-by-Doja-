@@ -4565,11 +4565,11 @@ export default function UserDashboard({
                               type="text"
                               value={snapchatPixelId}
                               onChange={e => setSnapchatPixelId(e.target.value)}
-                              placeholder="e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                              placeholder="e.g. 1924727069 or xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                               className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
                             />
                             <span className="block text-[9px] text-chocolate/40 leading-normal">
-                              Enter your Snapchat Pixel ID (standard UUID format) to track conversions, add-to-carts, and checkouts from Snapchat campaigns.
+                              Enter your Snapchat Pixel ID (either a 10-digit number like 1924727069 or standard UUID format) to track conversions, add-to-carts, and checkouts.
                             </span>
                           </div>
 
