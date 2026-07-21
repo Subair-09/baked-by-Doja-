@@ -3203,11 +3203,22 @@ export default function UserDashboard({
                   {/* Admin Header & Navigation Submenu */}
                   <div className="border-b border-chocolate/5 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <h4 className="font-serif font-black text-xl text-chocolate flex items-center gap-2">
+                      <h4 className="font-serif font-black text-xl text-chocolate flex items-center flex-wrap gap-2">
                         Doja Admin Suite
                         <span className="text-[10px] font-sans font-black bg-banana/50 text-chocolate px-2.5 py-1 rounded-full uppercase tracking-wider">
                           Executive Access
                         </span>
+                        {activeSnapchatPixelId ? (
+                          <span className="text-[10px] font-sans font-black bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Snapchat Pixel Connected: <span className="font-mono text-[9px] font-black">{activeSnapchatPixelId}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-sans font-black bg-rose-50 text-rose-700 border border-rose-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                            Snapchat Pixel Disconnected
+                          </span>
+                        )}
                       </h4>
                       <p className="text-[11px] text-chocolate/50">Manage your fresh-baking recipes, incoming customer transactions, and ingredient supplies.</p>
                     </div>
