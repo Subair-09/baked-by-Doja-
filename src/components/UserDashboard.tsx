@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import AuthScreen from './AuthScreen';
 import { products, gallery } from '../data';
 import { Product, GalleryItem } from '../types';
-import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase, initSnapchatPixel, setSnapchatCustomEventName, injectCustomScripts } from '../utils/pixel';
+import { initFacebookPixel, setFacebookConversionId, trackAddToCart, trackInitiateCheckout, trackPurchase, initSnapchatPixel, setSnapchatCustomEventName, injectCustomScripts, isValidSnapchatPixelId, getSnapchatPixelStatus, trackSnapchatEvent } from '../utils/pixel';
 
 interface UserDashboardProps {
   isOpen: boolean;
@@ -3220,17 +3220,31 @@ export default function UserDashboard({
                         <span className="text-[10px] font-sans font-black bg-banana/50 text-chocolate px-2.5 py-1 rounded-full uppercase tracking-wider">
                           Executive Access
                         </span>
-                        {activeSnapchatPixelId ? (
-                          <span className="text-[10px] font-sans font-black bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            Snapchat Pixel Connected: <span className="font-mono text-[9px] font-black">{activeSnapchatPixelId}</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-sans font-black bg-rose-50 text-rose-700 border border-rose-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                            Snapchat Pixel Disconnected
-                          </span>
-                        )}
+                        {(() => {
+                          const snapStatus = getSnapchatPixelStatus(activeSnapchatPixelId, activeSnapchatBaseCode);
+                          if (snapStatus.status === 'connected') {
+                            return (
+                              <span className="text-[10px] font-sans font-black bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Snapchat Pixel Connected: <span className="font-mono text-[9px] font-black">{activeSnapchatPixelId || 'Base Code Active'}</span>
+                              </span>
+                            );
+                          }
+                          if (snapStatus.status === 'invalid_id') {
+                            return (
+                              <span className="text-[10px] font-sans font-black bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm" title={`Invalid format: "${activeSnapchatPixelId}". Expected 10-digit number or UUID.`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                Snapchat Pixel: Invalid ID Format
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-[10px] font-sans font-black bg-rose-50 text-rose-700 border border-rose-100/50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                              Snapchat Pixel Disconnected
+                            </span>
+                          );
+                        })()}
                       </h4>
                       <p className="text-[11px] text-chocolate/50">Manage your fresh-baking recipes, incoming customer transactions, and ingredient supplies.</p>
                     </div>
@@ -4581,19 +4595,40 @@ export default function UserDashboard({
                           </div>
 
                           <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider">
-                              Snapchat Pixel ID
+                            <label className="block text-[10px] font-black uppercase text-chocolate/60 tracking-wider flex items-center justify-between">
+                              <span>Snapchat Pixel ID</span>
+                              {snapchatPixelId.trim().length > 0 && (
+                                isValidSnapchatPixelId(snapchatPixelId) ? (
+                                  <span className="text-[10px] font-sans font-bold text-emerald-600 flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Valid Format
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-sans font-bold text-rose-600 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Invalid Format
+                                  </span>
+                                )
+                              )}
                             </label>
                             <input
                               type="text"
                               value={snapchatPixelId}
                               onChange={e => setSnapchatPixelId(e.target.value)}
                               placeholder="e.g. 1924727069 or xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                              className="w-full bg-beige/5 border border-chocolate/15 rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-chocolate outline-none text-chocolate font-mono"
+                              className={`w-full bg-beige/5 border rounded-xl px-3.5 py-2.5 text-xs focus:ring-1 outline-none text-chocolate font-mono ${
+                                snapchatPixelId.trim().length > 0 && !isValidSnapchatPixelId(snapchatPixelId)
+                                  ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/20'
+                                  : 'border-chocolate/15 focus:ring-chocolate'
+                              }`}
                             />
-                            <span className="block text-[9px] text-chocolate/40 leading-normal">
-                              Enter your Snapchat Pixel ID (either a 10-digit number like 1924727069 or standard UUID format) to track conversions, add-to-carts, and checkouts.
-                            </span>
+                            {snapchatPixelId.trim().length > 0 && !isValidSnapchatPixelId(snapchatPixelId) ? (
+                              <span className="block text-[10px] text-rose-600 font-medium leading-normal bg-rose-50/80 p-2 rounded-lg border border-rose-200">
+                                ⚠️ Invalid format: "{snapchatPixelId}". A valid Snapchat Pixel ID must be a 10-digit number (e.g. <code>1924727069</code>) or a 36-character UUID (e.g. <code>1ad1c022-abbb-485f-9ebd-3d98d26489e4</code>).
+                              </span>
+                            ) : (
+                              <span className="block text-[9px] text-chocolate/40 leading-normal">
+                                Enter your Snapchat Pixel ID (either a 10-digit number like 1924727069 or standard UUID format) to track conversions, add-to-carts, and checkouts.
+                              </span>
+                            )}
                           </div>
 
                           <div className="space-y-1.5">
@@ -4644,7 +4679,7 @@ export default function UserDashboard({
                             </span>
                           </div>
 
-                          <div className="pt-2">
+                          <div className="pt-2 flex flex-wrap items-center gap-3">
                             <button
                               type="submit"
                               disabled={isSavingSettings}
@@ -4658,6 +4693,26 @@ export default function UserDashboard({
                               ) : (
                                 'Save dynamic keys'
                               )}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (typeof window !== 'undefined' && typeof window.snaptr === 'function') {
+                                  try {
+                                    window.snaptr('track', 'PAGE_VIEW');
+                                    alert('✅ Snapchat Pixel test event ("PAGE_VIEW") sent successfully! Check your Snapchat Events Manager or browser network console.');
+                                  } catch (err: any) {
+                                    alert('❌ Error sending Snapchat Pixel test event: ' + err.message);
+                                  }
+                                } else {
+                                  alert('⚠️ Snapchat Pixel script is not currently loaded in window.\n\nPlease save a valid Snapchat Pixel ID (e.g. 10-digit number like 1924727069 or standard UUID) or valid Snapchat Base Code script, then reload.');
+                                }
+                              }}
+                              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-500/30 font-extrabold text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-xl cursor-pointer transition-colors flex items-center gap-2"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                              Test Snapchat Pixel
                             </button>
                           </div>
                         </form>

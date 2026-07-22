@@ -55,38 +55,82 @@ export const initFacebookPixel = (pixelId: string) => {
 };
 
 /**
+ * Validates whether a given Snapchat Pixel ID matches Snapchat's supported formats.
+ * Accepts 8-15 digit numeric IDs (e.g. 1924727069) or standard 36-char UUID format.
+ */
+export const isValidSnapchatPixelId = (pixelId: string): boolean => {
+  if (!pixelId) return false;
+  const trimmed = pixelId.trim();
+  const isNumeric = /^\d{8,15}$/.test(trimmed);
+  const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(trimmed);
+  return isNumeric || isUuid;
+};
+
+/**
+ * Helper to determine Snapchat Pixel connection status for UI feedback.
+ */
+export const getSnapchatPixelStatus = (pixelId?: string, baseCode?: string) => {
+  const hasBaseCode = !!(baseCode && baseCode.trim().length > 0);
+  const hasPixelId = !!(pixelId && pixelId.trim().length > 0);
+
+  if (!hasPixelId && !hasBaseCode) {
+    return { status: 'disconnected' as const, message: 'Snapchat Pixel Disconnected' };
+  }
+
+  if (hasPixelId && !isValidSnapchatPixelId(pixelId!)) {
+    return { 
+      status: 'invalid_id' as const, 
+      message: `Invalid Snapchat Pixel ID format ("${pixelId}"). Must be a 10-digit number (e.g. 1924727069) or UUID.` 
+    };
+  }
+
+  return { status: 'connected' as const, message: 'Snapchat Pixel Connected' };
+};
+
+/**
  * Initializes the Snapchat Pixel with a given Pixel ID.
  */
 export const initSnapchatPixel = (pixelId: string) => {
   if (!pixelId || typeof window === "undefined") return;
 
-  activeSnapId = pixelId;
+  const trimmedId = pixelId.trim();
 
-  if (isSnapInitialized) {
+  if (!isValidSnapchatPixelId(trimmedId)) {
+    console.warn(`[Snapchat Pixel] Invalid Pixel ID format provided: "${pixelId}". Expected a 10-digit number (e.g. 1924727069) or standard UUID.`);
+    isSnapInitialized = false;
     return;
   }
 
-  /* eslint-disable */
-  (function (e: any, t: any, n: any, a?: any) {
-    if (e.snaptr) return;
-    a = e.snaptr = function () {
-      a.handleRequest ? a.handleRequest.apply(a, arguments) : a.queue.push(arguments);
-    };
-    a.queue = [];
-    var s = 'script';
-    var r = t.createElement(s);
-    r.async = !0;
-    r.src = n;
-    var u = t.getElementsByTagName(s)[0];
-    u.parentNode.insertBefore(r, u);
-  })(window, document, 'https://sc-static.net/scevent.min.js');
-  /* eslint-enable */
+  activeSnapId = trimmedId;
 
-  if (window.snaptr) {
-    window.snaptr("init", pixelId, {});
-    window.snaptr("track", "PAGE_VIEW");
-    isSnapInitialized = true;
-    console.log(`[Snapchat Pixel] Initialized successfully with ID: ${pixelId}`);
+  // Load Snapchat SDK script if not already present in the DOM
+  if (!window.snaptr) {
+    /* eslint-disable */
+    (function (e: any, t: any, n: any, a?: any) {
+      if (e.snaptr) return;
+      a = e.snaptr = function () {
+        a.handleRequest ? a.handleRequest.apply(a, arguments) : a.queue.push(arguments);
+      };
+      a.queue = [];
+      var s = 'script';
+      var r = t.createElement(s);
+      r.async = !0;
+      r.src = n;
+      var u = t.getElementsByTagName(s)[0];
+      u.parentNode.insertBefore(r, u);
+    })(window, document, 'https://sc-static.net/scevent.min.js');
+    /* eslint-enable */
+  }
+
+  if (typeof window.snaptr === 'function') {
+    try {
+      window.snaptr("init", trimmedId, {});
+      window.snaptr("track", "PAGE_VIEW");
+      isSnapInitialized = true;
+      console.log(`[Snapchat Pixel] Initialized successfully with ID: ${trimmedId}`);
+    } catch (e) {
+      console.error("[Snapchat Pixel] Initialization failed:", e);
+    }
   }
 };
 
@@ -127,16 +171,17 @@ export const trackPixelEvent = (eventName: string, options: Record<string, any> 
  * Tracks a Snapchat Pixel conversion event.
  */
 export const trackSnapchatEvent = (eventName: string, options: Record<string, any> = {}) => {
-  if (typeof window === "undefined" || !isSnapInitialized || !window.snaptr) {
-    console.log(`[Snapchat Pixel Simulation] Event "${eventName}" not tracked (Pixel not initialized or ID not set).`, options);
-    return;
-  }
+  if (typeof window === "undefined") return;
 
-  try {
-    window.snaptr("track", eventName, options);
-    console.log(`[Snapchat Pixel] Tracked Event: ${eventName}`, options);
-  } catch (err) {
-    console.error("[Snapchat Pixel] Failed to track event:", err);
+  if (typeof window.snaptr === "function") {
+    try {
+      window.snaptr("track", eventName, options);
+      console.log(`[Snapchat Pixel] Tracked Event: ${eventName}`, options);
+    } catch (err) {
+      console.error("[Snapchat Pixel] Failed to track event:", err);
+    }
+  } else {
+    console.log(`[Snapchat Pixel Simulation] Event "${eventName}" not tracked (Snapchat script/snaptr not active in window).`, options);
   }
 };
 
