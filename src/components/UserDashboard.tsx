@@ -4701,7 +4701,13 @@ export default function UserDashboard({
                                 if (typeof window !== 'undefined' && typeof window.snaptr === 'function') {
                                   try {
                                     window.snaptr('track', 'PAGE_VIEW');
-                                    alert('✅ Snapchat Pixel test event ("PAGE_VIEW") sent successfully! Check your Snapchat Events Manager or browser network console.');
+                                    window.snaptr('track', 'ADD_CART', {
+                                      price: 2500,
+                                      currency: 'NGN',
+                                      item_ids: ['test_product_ngn'],
+                                      item_category: 'Baked Goods'
+                                    });
+                                    alert('✅ Snapchat Pixel test events ("PAGE_VIEW" and "ADD_CART" in NGN ₦) sent successfully!\n\nCheck your Snapchat Events Manager test stream to see currency: NGN.');
                                   } catch (err: any) {
                                     alert('❌ Error sending Snapchat Pixel test event: ' + err.message);
                                   }
@@ -4712,7 +4718,7 @@ export default function UserDashboard({
                               className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-500/30 font-extrabold text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-xl cursor-pointer transition-colors flex items-center gap-2"
                             >
                               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                              Test Snapchat Pixel
+                              Test Snapchat Pixel (NGN ₦)
                             </button>
                           </div>
                         </form>
