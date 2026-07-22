@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Database, ShoppingBag, TrendingUp, Compass, Award, RefreshCw, ChevronRight, Package, 
   Sparkles, Users, ChevronDown, ChevronUp, Check, LogOut, LayoutDashboard, User,
-  CreditCard, MessageSquare, Star, Trash2, Plus, Minus, LogIn, ShoppingCart, Clock, ShieldCheck, Truck, AlertTriangle,
+  CreditCard, MessageSquare, Star, Trash2, Plus, Minus, LogIn, ShoppingCart, Clock, ShieldCheck, Truck, AlertTriangle, XCircle,
   UploadCloud, Loader2, Wallet, Building2, Eye, Monitor, Smartphone, Tablet, BarChart2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1612,7 +1612,7 @@ export default function UserDashboard({
       return;
     }
 
-    // 2. Launch Paystack Redirect Checkout
+    // 2. Launch Paystack Checkout (Inline or Redirect Window)
     setPaymentStepText("Generating secure checkout portal...");
     
     // Sanitize phone number to form a valid email address (remove spaces, pluses, parentheses)
@@ -1621,6 +1621,8 @@ export default function UserDashboard({
     const userEmail = `${cleanPhone}@bakedbydoja.com`;
     
     try {
+      const isScriptLoaded = await ensurePaystackLoaded();
+
       const initRes = await fetch('/api/payments/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1634,17 +1636,47 @@ export default function UserDashboard({
       });
 
       const initData = await initRes.json();
-      if (initData.success && initData.authorization_url) {
-        setPendingPaymentReference(initData.reference || orderId);
+      if (initData.success && (initData.authorization_url || initData.reference)) {
+        const ref = initData.reference || orderId;
+        setPendingPaymentReference(ref);
         setPendingPaymentOrderId(orderId);
         setPendingPaymentOrderData(orderData);
         
-        setPaymentStepText("A secure checkout tab has been opened for you.");
-        
-        // Open Paystack in a new window/tab
-        window.open(initData.authorization_url, '_blank');
-        
-        setPaymentStepText("Waiting for payment confirmation from Paystack...");
+        // If inline Paystack script is ready on window.PaystackPop, initialize inline popup
+        if (isScriptLoaded && typeof (window as any).PaystackPop !== 'undefined') {
+          setPaymentStepText("Paystack popup active. Complete payment or click Cancel to stop.");
+          try {
+            const handler = (window as any).PaystackPop.setup({
+              key: paystackKey,
+              email: userEmail,
+              amount: getCartGrandTotal() * 100,
+              currency: 'NGN',
+              ref: ref,
+              metadata: { orderData },
+              callback: function(_response: any) {
+                // Payment completed inside popup
+                handleManualPaymentVerification();
+              },
+              onClose: function() {
+                // User clicked 'X' or cancelled inside Paystack popup modal
+                handleCancelPayment();
+              }
+            });
+            handler.openIframe();
+          } catch (popupErr) {
+            console.warn("Inline Paystack popup failed, falling back to new window tab:", popupErr);
+            if (initData.authorization_url) {
+              setPaymentStepText("A secure checkout tab has been opened for you.");
+              window.open(initData.authorization_url, '_blank');
+              setPaymentStepText("Waiting for payment confirmation from Paystack...");
+            }
+          }
+        } else if (initData.authorization_url) {
+          // Fallback to opening redirect link in new tab
+          setPaymentStepText("A secure checkout tab has been opened for you.");
+          window.open(initData.authorization_url, '_blank');
+          setPaymentStepText("Waiting for payment confirmation from Paystack...");
+        }
       } else {
         throw new Error(initData.message || "Failed to initialize secure payment session.");
       }
@@ -2719,9 +2751,9 @@ export default function UserDashboard({
                               
                               <button
                                 onClick={handleCancelPayment}
-                                className="w-full bg-chocolate/10 hover:bg-chocolate/15 text-chocolate font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60 font-black uppercase tracking-wider text-xs px-6 py-3 rounded-xl transition-all inline-flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                               >
-                                <X className="w-4 h-4" />
+                                <XCircle className="w-4 h-4 text-rose-600" />
                                 Cancel & Stop Payment
                               </button>
                             </div>
